@@ -12,6 +12,8 @@ import { CoffeeIcon } from "@/components/ui/coffee";
 import { BlocksIcon } from "@/components/ui/blocks-icon";
 import { AudioLinesIcon, type AudioLinesIconHandle } from "@/components/ui/audio-lines";
 import { ToolCaseIcon } from "@/components/ui/tool-case";
+import { Download } from "lucide-react";
+import { useDownloadQueueData } from "@/hooks/useDownloadQueueData";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -22,12 +24,15 @@ export type PageType = "main" | "settings" | "debug" | "audio-analysis" | "audio
 interface SidebarProps {
     currentPage: PageType;
     onPageChange: (page: PageType) => void;
+    onOpenQueue: () => void;
 }
 interface AnimatedIconHandle {
     startAnimation: () => void;
     stopAnimation: () => void;
 }
-export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
+export function Sidebar({ currentPage, onPageChange, onOpenQueue }: SidebarProps) {
+    const queueInfo = useDownloadQueueData();
+    const activeCount = queueInfo.queue.filter(item => item.status === "queued" || item.status === "downloading").length;
     const [isIssuesDialogOpen, setIsIssuesDialogOpen] = useState(false);
     const [hasIssueAgreement, setHasIssueAgreement] = useState(false);
     const analyzerIconRef = useRef<ActivityIconHandle>(null);
@@ -61,6 +66,20 @@ export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
                     </TooltipTrigger>
                     <TooltipContent side="right">
                         <p>Home</p>
+                    </TooltipContent>
+                </Tooltip>
+
+                <Tooltip delayDuration={0}>
+                    <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" className="relative h-10 w-10 hover:bg-primary/10 hover:text-primary" onClick={onOpenQueue}>
+                            <Download size={20} className={activeCount > 0 ? "text-primary" : undefined}/>
+                            {activeCount > 0 && (<span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-none text-primary-foreground tabular-nums">
+                                {activeCount > 99 ? "99+" : activeCount}
+                            </span>)}
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                        <p>{activeCount > 0 ? `Download Queue (${activeCount} active)` : "Download Queue"}</p>
                     </TooltipContent>
                 </Tooltip>
 

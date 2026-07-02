@@ -635,7 +635,7 @@ function App() {
     return (<TooltipProvider>
         <div className="h-screen overflow-hidden bg-background">
             <TitleBar />
-            <Sidebar currentPage={currentPage} onPageChange={handlePageChange}/>
+            <Sidebar currentPage={currentPage} onPageChange={handlePageChange} onOpenQueue={downloadQueue.openQueue}/>
 
 
             <div ref={contentScrollRef} className="fixed top-10 right-0 bottom-0 left-14 overflow-y-auto overflow-x-hidden">
