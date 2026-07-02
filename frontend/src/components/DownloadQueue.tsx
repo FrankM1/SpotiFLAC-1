@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { X, Download, CheckCircle2, XCircle, Clock, FileCheck, Trash2, HardDrive, Zap, Timer, FileDown } from "lucide-react";
+import { X, Download, CheckCircle2, XCircle, Clock, FileCheck, Trash2, HardDrive, Zap, Timer, FileDown, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +7,15 @@ import { GetDownloadQueue, ClearCompletedDownloads, ClearAllDownloads, ExportFai
 import { toastWithSound as toast } from "@/lib/toast-with-sound";
 import { backend } from "../../wailsjs/go/models";
 import type { PendingBatch } from "@/hooks/useDownload";
+// Split a path into a truncatable directory prefix and the filename, which stays
+// pinned. Middle-truncation keeps the useful part (the filename) visible.
+function splitFilePath(path: string): { dir: string; name: string } {
+    const sep = path.lastIndexOf("/") >= 0 ? "/" : "\\";
+    const idx = path.lastIndexOf(sep);
+    if (idx < 0)
+        return { dir: "", name: path };
+    return { dir: path.slice(0, idx + 1), name: path.slice(idx + 1) };
+}
 interface DownloadQueueProps {
     isOpen: boolean;
     onClose: () => void;
@@ -136,11 +145,15 @@ export function DownloadQueue({ isOpen, onClose, pendingBatches = [], onRemovePe
     <DialogContent className="max-w-[1200px] w-[95vw] max-h-[80vh] flex flex-col p-0 gap-0 [&>button]:hidden">
       <DialogHeader className="px-6 pt-6 pb-4 border-b space-y-0">
         <div className="flex items-center justify-between mb-4">
-          <DialogTitle className="text-lg font-semibold hover:text-primary transition-colors cursor-pointer" onClick={handleReset}>Download Queue</DialogTitle>
+          <DialogTitle className="text-lg font-semibold">Download Queue</DialogTitle>
           <div className="flex items-center gap-2">
             {(queueInfo.completed_count > 0 || queueInfo.failed_count > 0 || queueInfo.skipped_count > 0) && (<Button variant="ghost" size="sm" className="h-7 text-xs gap-1.5" onClick={handleClearHistory}>
               <Trash2 className="h-3 w-3"/>
               Clear History
+            </Button>)}
+            {queueInfo.queue.length > 0 && (<Button variant="ghost" size="sm" className="h-7 text-xs gap-1.5" onClick={handleReset}>
+              <RotateCcw className="h-3 w-3"/>
+              Reset Queue
             </Button>)}
             {queueInfo.failed_count > 0 && (<Button variant="ghost" size="sm" className="h-7 text-xs gap-1.5" onClick={handleExportFailed}>
               <FileDown className="h-3 w-3"/>
@@ -279,8 +292,9 @@ export function DownloadQueue({ isOpen, onClose, pendingBatches = [], onRemovePe
                 </div>)}
 
 
-                {(item.status === "completed" || item.status === "skipped") && item.file_path && (<div className="mt-1.5 text-xs text-muted-foreground truncate font-mono">
-                  {item.file_path}
+                {(item.status === "completed" || item.status === "skipped") && item.file_path && (<div className="mt-1.5 flex text-xs text-muted-foreground font-mono" title={item.file_path}>
+                  <span className="truncate min-w-0">{splitFilePath(item.file_path).dir}</span>
+                  <span className="whitespace-nowrap">{splitFilePath(item.file_path).name}</span>
                 </div>)}
               </div>
             </div>
