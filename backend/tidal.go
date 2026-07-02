@@ -254,6 +254,9 @@ func (t *TidalDownloader) GetTrackIDFromURL(tidalURL string) (int64, error) {
 func (t *TidalDownloader) GetDownloadURL(trackID int64, quality string) (string, error) {
 	fmt.Println("Fetching URL...")
 	if strings.TrimSpace(t.apiURL) == "" {
+		if !AllowCommunityServers {
+			return "", errNoLocalServer("Tidal", "set a custom Tidal instance URL in Settings")
+		}
 		fmt.Println("No custom Tidal instance configured, using community tdl-a endpoint")
 		return t.getTidalCommunityDownloadURL(trackID, quality)
 	}

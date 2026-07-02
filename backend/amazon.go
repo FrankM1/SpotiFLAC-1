@@ -69,6 +69,10 @@ func amazonCommunityNormalizeQuality(quality string) string {
 
 func (a *AmazonDownloader) downloadFromCommunity(amazonURL, outputDir, quality string) (string, error) {
 
+	if !AllowCommunityServers {
+		return "", errNoLocalServer("Amazon", "Amazon has no local-server option yet; use the Qobuz source with your local server instead")
+	}
+
 	asinRegex := regexp.MustCompile(`(B[0-9A-Z]{9})`)
 	asin := asinRegex.FindString(amazonURL)
 	if asin == "" {

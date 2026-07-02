@@ -24,6 +24,7 @@ import (
 
 type App struct {
 	ctx context.Context
+	api *apiServer
 }
 
 type CurrentIPInfo struct {
@@ -272,9 +273,15 @@ func (a *App) startup(ctx context.Context) {
 	if err := backend.SanitizePersistedConfigSettings(); err != nil {
 		fmt.Printf("Failed to sanitize persisted config settings: %v\n", err)
 	}
+
+	a.api = newAPIServer(a)
+	a.api.start()
 }
 
 func (a *App) shutdown(ctx context.Context) {
+	if a.api != nil {
+		a.api.stop()
+	}
 	backend.CloseHistoryDB()
 	backend.CloseISRCCacheDB()
 }
@@ -702,8 +709,9 @@ func (a *App) DownloadTrack(req DownloadRequest) (DownloadResponse, error) {
 			isrc = <-isrcChan
 		}
 		downloader := backend.NewQobuzDownloader()
-		if strings.HasPrefix(strings.TrimRight(strings.TrimSpace(req.QobuzAPIURL), "/"), "https://") {
+		if qobuzURL := strings.TrimRight(strings.TrimSpace(req.QobuzAPIURL), "/"); strings.HasPrefix(qobuzURL, "https://") || strings.HasPrefix(qobuzURL, "http://") {
 			downloader.SetCustomAPIURL(req.QobuzAPIURL)
+			downloader.SetYouTubeDurationHint(req.Duration)
 		}
 		quality := req.AudioFormat
 		if quality == "" {
@@ -1259,7 +1267,7 @@ func (a *App) CheckCustomTidalAPI(apiURL string) bool {
 
 func (a *App) CheckCustomQobuzAPI(apiURL string) bool {
 	apiURL = strings.TrimRight(strings.TrimSpace(apiURL), "/")
-	if !strings.HasPrefix(apiURL, "https://") {
+	if !strings.HasPrefix(apiURL, "https://") && !strings.HasPrefix(apiURL, "http://") {
 		return false
 	}
 
@@ -1323,13 +1331,18 @@ func buildQobuzStatusCheckURLs(apiURL string) []string {
 	if trimmed := strings.TrimSpace(apiURL); trimmed != "" {
 		return []string{trimmed}
 	}
-
+	if !backend.AllowCommunityServers {
+		return nil
+	}
 	return []string{backend.GetQobuzCommunityHealthURL()}
 }
 
 func buildAmazonStatusCheckURLs(apiURL string) []string {
 	baseURL := strings.TrimRight(strings.TrimSpace(apiURL), "/")
 	if baseURL == "" {
+		if !backend.AllowCommunityServers {
+			return nil
+		}
 		baseURL = backend.GetAmazonMusicAPIBaseURL()
 	}
 	return []string{fmt.Sprintf("%s/status", baseURL)}

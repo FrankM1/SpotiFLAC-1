@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -74,6 +75,14 @@ func (q *QobuzDownloader) getQobuzCustomDownloadURL(trackID int64, quality strin
 	}
 
 	endpoint := fmt.Sprintf("%s/api/download-music?track_id=%d&quality=%s", base, trackID, url.QueryEscape(qualityCode))
+	// When resolving via a YouTube-backed server, pass Spotify metadata so it can
+	// match directly without a Qobuz catalog ID (works for tracks not on Qobuz).
+	if strings.TrimSpace(q.ytTitle) != "" && strings.TrimSpace(q.ytArtist) != "" {
+		endpoint += "&title=" + url.QueryEscape(q.ytTitle) + "&artist=" + url.QueryEscape(q.ytArtist)
+		if q.ytDuration > 0 {
+			endpoint += "&duration=" + url.QueryEscape(strconv.Itoa(q.ytDuration))
+		}
+	}
 	req, err := NewRequestWithDefaultHeaders(http.MethodGet, endpoint, nil)
 	if err != nil {
 		return "", err

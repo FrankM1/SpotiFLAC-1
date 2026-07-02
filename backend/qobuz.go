@@ -18,10 +18,26 @@ type QobuzDownloader struct {
 	customURL   string
 	SourceURL   string
 	SourceLabel string
+
+	// YouTube-backed custom-server hints. When a custom server URL is set, the
+	// track is resolved directly from these Spotify fields instead of the Qobuz
+	// catalog, so tracks that aren't on Qobuz (niche/regional releases) still
+	// download. Duration (seconds) sharpens the YouTube match when known.
+	ytTitle    string
+	ytArtist   string
+	ytDuration int
 }
 
 func (q *QobuzDownloader) SetCustomAPIURL(apiURL string) {
 	q.customURL = strings.TrimRight(strings.TrimSpace(apiURL), "/")
+}
+
+// SetYouTubeDurationHint provides the track duration (seconds) used to sharpen
+// the YouTube match on a custom server. Ignored when <= 0.
+func (q *QobuzDownloader) SetYouTubeDurationHint(seconds int) {
+	if seconds > 0 {
+		q.ytDuration = seconds
+	}
 }
 
 type QobuzTrack struct {
@@ -367,6 +383,7 @@ func (q *QobuzDownloader) GetDownloadURL(trackID int64, quality string, allowFal
 
 	if strings.TrimSpace(q.customURL) != "" {
 		fmt.Printf("Trying custom Qobuz instance...\n")
+		SetDownloadStatus("Finding match on YouTube…")
 		url, err := q.getQobuzCustomDownloadURL(trackID, qualityCode)
 		if err == nil {
 			fmt.Printf("Success (custom Qobuz instance)\n")
@@ -376,10 +393,12 @@ func (q *QobuzDownloader) GetDownloadURL(trackID int64, quality string, allowFal
 			return "", err
 		}
 		fmt.Printf("Custom Qobuz instance failed: %v\n", err)
-		if !allowFallback {
+		if !allowFallback || !AllowCommunityServers {
 			return "", err
 		}
 
+	} else if !AllowCommunityServers {
+		return "", errNoLocalServer("Qobuz", "set a custom Qobuz instance URL in Settings")
 	}
 
 	downloadFunc := func(qual string) (string, error) {
@@ -437,7 +456,10 @@ func (q *QobuzDownloader) DownloadFile(url, filepath string) error {
 	fmt.Println("Starting file download...")
 
 	downloadClient := &http.Client{
-		Timeout: 5 * time.Minute,
+		// Generous: a YouTube-backed custom server may fetch+transcode with
+		// several retries before streaming. Concurrent downloads mean a slow
+		// track doesn't block others, so a long ceiling is safe.
+		Timeout: 20 * time.Minute,
 	}
 
 	req, err := NewRequestWithDefaultHeaders(http.MethodGet, url, nil)
@@ -610,17 +632,28 @@ func (q *QobuzDownloader) DownloadTrackWithISRC(isrc, outputDir, quality, filena
 		}
 	}
 
-	track, err := q.searchByISRC(isrc, spotifyTrackName, spotifyArtistName, spotifyAlbumName)
-	if err != nil {
-		return "", err
+	var track *QobuzTrack
+	if strings.TrimSpace(q.customURL) != "" {
+		// Custom (YouTube-backed) server: resolve straight from Spotify metadata,
+		// skipping the Qobuz catalog so tracks not on Qobuz still download.
+		q.ytTitle = strings.TrimSpace(spotifyTrackName)
+		q.ytArtist = strings.TrimSpace(spotifyArtistName)
+		track = &QobuzTrack{Title: q.ytTitle}
+		track.Performer.Name = q.ytArtist
+		q.SourceLabel = strings.TrimSpace(fmt.Sprintf("%s - %s", q.ytArtist, q.ytTitle))
+	} else {
+		found, err := q.searchByISRC(isrc, spotifyTrackName, spotifyArtistName, spotifyAlbumName)
+		if err != nil {
+			return "", err
+		}
+		track = found
+		matchedTitle := strings.TrimSpace(track.Title)
+		if v := strings.TrimSpace(track.Version); v != "" {
+			matchedTitle = matchedTitle + " (" + v + ")"
+		}
+		q.SourceURL = fmt.Sprintf("https://open.qobuz.com/track/%d", track.ID)
+		q.SourceLabel = strings.TrimSpace(fmt.Sprintf("%s - %s", qobuzTrackDisplayArtist(*track), matchedTitle))
 	}
-
-	matchedTitle := strings.TrimSpace(track.Title)
-	if v := strings.TrimSpace(track.Version); v != "" {
-		matchedTitle = matchedTitle + " (" + v + ")"
-	}
-	q.SourceURL = fmt.Sprintf("https://open.qobuz.com/track/%d", track.ID)
-	q.SourceLabel = strings.TrimSpace(fmt.Sprintf("%s - %s", qobuzTrackDisplayArtist(*track), matchedTitle))
 
 	artists := spotifyArtistName
 	trackTitle := spotifyTrackName
@@ -677,6 +710,9 @@ func (q *QobuzDownloader) DownloadTrackWithISRC(isrc, outputDir, quality, filena
 	}
 
 	fmt.Printf("Downloading FLAC file to: %s\n", filepath)
+	if strings.TrimSpace(q.customURL) != "" {
+		SetDownloadStatus("Fetching audio & transcoding…")
+	}
 	if err := q.DownloadFile(downloadURL, filepath); err != nil {
 		return "", fmt.Errorf("failed to download file: %w", err)
 	}

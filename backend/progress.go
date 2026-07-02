@@ -41,6 +41,9 @@ var (
 	currentSpeed        float64
 	speedLock           sync.RWMutex
 
+	statusText string
+	statusLock sync.RWMutex
+
 	rateLimitUntilMs int64
 	rateLimitLock    sync.RWMutex
 
@@ -69,6 +72,7 @@ type ProgressInfo struct {
 	CooldownSecs    int     `json:"cooldown_secs"`
 	CooldownMessage string  `json:"cooldown_message"`
 	CooldownEventID int64   `json:"cooldown_event_id"`
+	StatusText      string  `json:"status_text"`
 }
 
 type DownloadQueueInfo struct {
@@ -95,6 +99,10 @@ func GetDownloadProgress() ProgressInfo {
 	speedLock.RLock()
 	speed := currentSpeed
 	speedLock.RUnlock()
+
+	statusLock.RLock()
+	status := statusText
+	statusLock.RUnlock()
 
 	rateLimitLock.RLock()
 	untilMs := rateLimitUntilMs
@@ -138,6 +146,7 @@ func GetDownloadProgress() ProgressInfo {
 		CooldownSecs:    cooldownSecs,
 		CooldownMessage: cdMessage,
 		CooldownEventID: cdEventID,
+		StatusText:      status,
 	}
 }
 
@@ -189,6 +198,22 @@ func SetDownloadProgress(mbDownloaded float64) {
 	currentProgressLock.Unlock()
 }
 
+// SetDownloadStatus sets a human-readable phase label shown while no byte-level
+// progress is available (e.g. a YouTube-backed server fetching/transcoding
+// before it streams the file). Cleared automatically when a download ends.
+func SetDownloadStatus(s string) {
+	statusLock.Lock()
+	statusText = s
+	statusLock.Unlock()
+}
+
+// ClearDownloadStatus removes the phase label.
+func ClearDownloadStatus() {
+	statusLock.Lock()
+	statusText = ""
+	statusLock.Unlock()
+}
+
 func SetDownloading(downloading bool) {
 	downloadingLock.Lock()
 	isDownloading = downloading
@@ -198,6 +223,7 @@ func SetDownloading(downloading bool) {
 
 		SetDownloadProgress(0)
 		SetDownloadSpeed(0)
+		ClearDownloadStatus()
 		ClearRateLimitCooldown()
 	}
 }
