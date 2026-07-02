@@ -49,6 +49,7 @@ export interface Settings {
     amazonQuality: "16" | "24" | "atmos";
     autoOrder: "tidal-qobuz-amazon" | "tidal-amazon-qobuz" | "qobuz-tidal-amazon" | "qobuz-amazon-tidal" | "amazon-tidal-qobuz" | "amazon-qobuz-tidal" | string;
     autoQuality: "16" | "24";
+    concurrentDownloads: number;
     allowFallback: boolean;
     createPlaylistFolder: boolean;
     playlistOwnerFolderName: boolean;
@@ -215,6 +216,7 @@ export const DEFAULT_SETTINGS: Settings = {
     amazonQuality: "16",
     autoOrder: "tidal-qobuz-amazon",
     autoQuality: "16",
+    concurrentDownloads: 3,
     allowFallback: true,
     createPlaylistFolder: true,
     playlistOwnerFolderName: false,
@@ -561,7 +563,7 @@ function normalizeCustomQobuzApi(value: unknown): string {
         : "";
 }
 export function hasConfiguredCustomQobuzApi(value: unknown): boolean {
-    return normalizeCustomQobuzApi(value).startsWith("https://");
+    return /^https?:\/\//.test(normalizeCustomQobuzApi(value));
 }
 export function sanitizeAutoOrder(order: unknown): string {
     const allowedServices = new Set(["tidal", "qobuz", "amazon"]);

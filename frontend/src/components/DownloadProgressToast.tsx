@@ -4,8 +4,9 @@ import { Download, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 interface DownloadProgressToastProps {
     onClick: () => void;
+    pendingBatchCount?: number;
 }
-export function DownloadProgressToast({ onClick }: DownloadProgressToastProps) {
+export function DownloadProgressToast({ onClick, pendingBatchCount = 0 }: DownloadProgressToastProps) {
     const progress = useDownloadProgress();
     const queueInfo = useDownloadQueueData();
     const hasActiveDownloads = queueInfo.queue.some(item => item.status === "queued" || item.status === "downloading");
@@ -17,12 +18,19 @@ export function DownloadProgressToast({ onClick }: DownloadProgressToastProps) {
         <div className="flex items-center gap-3">
           <Download className={`h-4 w-4 text-blue-600 dark:text-blue-400 ${progress.is_downloading ? 'animate-bounce' : ''}`}/>
           <div className="flex flex-col min-w-[80px]">
-            <p className="text-sm font-medium font-mono tabular-nums">
-              {progress.mb_downloaded.toFixed(2)} MB
-            </p>
-            {progress.speed_mbps > 0 && (<p className="text-xs font-mono tabular-nums text-muted-foreground dark:text-blue-300">
-                {progress.speed_mbps.toFixed(2)} MB/s
-              </p>)}
+            {progress.speed_mbps > 0 || progress.mb_downloaded > 0 || !progress.status_text ? (<>
+              <p className="text-sm font-medium font-mono tabular-nums">
+                {progress.mb_downloaded.toFixed(2)} MB
+              </p>
+              {progress.speed_mbps > 0 && (<p className="text-xs font-mono tabular-nums text-muted-foreground dark:text-blue-300">
+                  {progress.speed_mbps.toFixed(2)} MB/s
+                </p>)}
+            </>) : (<p className="text-sm font-medium">
+              {progress.status_text}
+            </p>)}
+            {pendingBatchCount > 0 && (<p className="text-xs text-muted-foreground dark:text-blue-300">
+              +{pendingBatchCount} queued
+            </p>)}
           </div>
           <ChevronRight className="ml-1 h-4 w-4 text-muted-foreground dark:text-blue-300"/>
         </div>

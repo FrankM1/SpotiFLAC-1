@@ -6,11 +6,14 @@ import { Badge } from "@/components/ui/badge";
 import { GetDownloadQueue, ClearCompletedDownloads, ClearAllDownloads, ExportFailedDownloads } from "../../wailsjs/go/main/App";
 import { toastWithSound as toast } from "@/lib/toast-with-sound";
 import { backend } from "../../wailsjs/go/models";
+import type { PendingBatch } from "@/hooks/useDownload";
 interface DownloadQueueProps {
     isOpen: boolean;
     onClose: () => void;
+    pendingBatches?: PendingBatch[];
+    onRemovePendingBatch?: (id: string) => void;
 }
-export function DownloadQueue({ isOpen, onClose }: DownloadQueueProps) {
+export function DownloadQueue({ isOpen, onClose, pendingBatches = [], onRemovePendingBatch }: DownloadQueueProps) {
     const [queueInfo, setQueueInfo] = useState<backend.DownloadQueueInfo>(new backend.DownloadQueueInfo({
         is_downloading: false,
         queue: [],
@@ -199,6 +202,21 @@ export function DownloadQueue({ isOpen, onClose }: DownloadQueueProps) {
             </span>
           </div>
         </div>
+
+        {pendingBatches.length > 0 && (<div className="flex flex-col gap-1.5 text-sm pt-3 mt-3 border-t">
+          <div className="flex items-center gap-1.5 text-muted-foreground">
+            <Clock className="h-3.5 w-3.5"/>
+            <span>Up next ({pendingBatches.length} batch{pendingBatches.length === 1 ? "" : "es"})</span>
+          </div>
+          {pendingBatches.map((batch, index) => (<div key={batch.id} className="flex items-center gap-2 pl-5">
+            <span className="text-xs text-muted-foreground font-mono">{index + 1}.</span>
+            <span className="truncate font-medium">{batch.label}</span>
+            <span className="text-xs text-muted-foreground">{batch.trackCount.toLocaleString()} track{batch.trackCount === 1 ? "" : "s"}</span>
+            {onRemovePendingBatch && (<Button variant="ghost" size="icon" className="h-5 w-5 ml-auto" onClick={() => onRemovePendingBatch(batch.id)}>
+              <X className="h-3 w-3"/>
+            </Button>)}
+          </div>))}
+        </div>)}
 
       </DialogHeader>
 

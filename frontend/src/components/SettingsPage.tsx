@@ -241,8 +241,8 @@ export function SettingsPage({ onUnsavedChangesChange, onResetRequest, }: Settin
     };
     const handleCheckCustomQobuzApi = async () => {
         const normalizedCustomQobuzApi = (tempSettings.customQobuzApi || "").trim().replace(/\/+$/g, "");
-        if (!normalizedCustomQobuzApi.startsWith("https://")) {
-            toast.error("Enter a valid HTTPS Qobuz-DL instance URL");
+        if (!normalizedCustomQobuzApi.startsWith("https://") && !normalizedCustomQobuzApi.startsWith("http://")) {
+            toast.error("Enter a valid Qobuz-DL instance URL (http:// or https://)");
             return;
         }
         setCustomQobuzApiStatus("checking");
@@ -655,6 +655,18 @@ export function SettingsPage({ onUnsavedChangesChange, onResetRequest, }: Settin
                         <SelectItem value="atmos">Dolby Atmos</SelectItem>
                       </SelectContent>
                     </Select>)}
+
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="concurrent-downloads" className="text-sm text-muted-foreground whitespace-nowrap">At once</Label>
+                    <Select value={String(tempSettings.concurrentDownloads || 3)} onValueChange={(value) => setTempSettings((prev) => ({ ...prev, concurrentDownloads: Number(value) }))}>
+                      <SelectTrigger id="concurrent-downloads" className="h-9 w-fit">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[1, 2, 3, 4, 5, 6, 8, 10].map((n) => (<SelectItem key={n} value={String(n)}>{n}</SelectItem>))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
                 {((effectiveDownloader === "tidal" &&
@@ -1012,7 +1024,7 @@ export function SettingsPage({ onUnsavedChangesChange, onResetRequest, }: Settin
             setCustomQobuzApiStatus("idle");
             void persistCustomQobuzApi(nextValue);
         }} placeholder="https://your-qobuz-dl.example"/>
-                <Button type="button" variant="outline" className="gap-2" onClick={() => void handleCheckCustomQobuzApi()} disabled={!((tempSettings.customQobuzApi || "").trim().startsWith("https://")) || customQobuzApiStatus === "checking"}>
+                <Button type="button" variant="outline" className="gap-2" onClick={() => void handleCheckCustomQobuzApi()} disabled={!(/^https?:\/\//.test((tempSettings.customQobuzApi || "").trim())) || customQobuzApiStatus === "checking"}>
                   {customQobuzApiStatus === "checking" ? "Checking..." : <><PlugZap className="h-4 w-4"/>Check</>}
                 </Button>
                 {tempSettings.customQobuzApi && (<Button type="button" variant="outline" size="icon" onClick={() => {

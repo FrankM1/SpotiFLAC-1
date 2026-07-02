@@ -647,12 +647,12 @@ function App() {
             </div>
 
 
-            <DownloadProgressToast onClick={downloadQueue.openQueue}/>
+            <DownloadProgressToast onClick={downloadQueue.openQueue} pendingBatchCount={download.pendingBatches.length}/>
 
             <CooldownBanner />
 
 
-            <DownloadQueue isOpen={downloadQueue.isOpen} onClose={downloadQueue.closeQueue}/>
+            <DownloadQueue isOpen={downloadQueue.isOpen} onClose={downloadQueue.closeQueue} pendingBatches={download.pendingBatches} onRemovePendingBatch={download.removePendingBatch}/>
 
 
             {showScrollTop && (<Button onClick={scrollToTop} className="fixed bottom-6 right-6 z-50 h-10 w-10 rounded-full shadow-lg" size="icon">

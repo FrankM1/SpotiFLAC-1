@@ -86,6 +86,15 @@ function getTidalAudioFormat(settings: any, mode: "single" | "auto"): "LOSSLESS"
 function shouldFetchStreamingURLs(order: string[]): boolean {
     return order.includes("amazon") || order.includes("tidal");
 }
+export interface PendingBatch {
+    id: string;
+    label: string;
+    trackCount: number;
+    kind: "all" | "selected";
+}
+type QueuedBatch = PendingBatch & {
+    run: () => Promise<void>;
+};
 export function useDownload() {
     const [downloadProgress, setDownloadProgress] = useState<number>(0);
     const [downloadRemainingCount, setDownloadRemainingCount] = useState<number>(0);
@@ -100,6 +109,58 @@ export function useDownload() {
         artists: string;
     } | null>(null);
     const shouldStopDownloadRef = useRef(false);
+    const [pendingBatches, setPendingBatches] = useState<PendingBatch[]>([]);
+    const pendingBatchesRef = useRef<QueuedBatch[]>([]);
+    const isBatchRunningRef = useRef(false);
+    const stopAllBatchesRef = useRef(false);
+    const batchSeqRef = useRef(0);
+    const syncPendingBatches = () => {
+        setPendingBatches(pendingBatchesRef.current.map(({ run: _run, ...meta }) => meta));
+    };
+    const removePendingBatch = (id: string) => {
+        pendingBatchesRef.current = pendingBatchesRef.current.filter((b) => b.id !== id);
+        syncPendingBatches();
+    };
+    const enqueueBatch = async (label: string, trackCount: number, kind: "all" | "selected", run: () => Promise<void>) => {
+        if (isBatchRunningRef.current) {
+            batchSeqRef.current += 1;
+            pendingBatchesRef.current.push({ id: `batch-${batchSeqRef.current}`, label, trackCount, kind, run });
+            syncPendingBatches();
+            logger.info(`queued batch: ${label} (${trackCount} tracks)`);
+            toast.info(`Queued "${label}" (${trackCount} track${trackCount === 1 ? "" : "s"})`);
+            return;
+        }
+        isBatchRunningRef.current = true;
+        stopAllBatchesRef.current = false;
+        try {
+            try {
+                await run();
+            }
+            catch (err) {
+                logger.error(`batch "${label}" failed: ${err}`);
+            }
+            while (!stopAllBatchesRef.current) {
+                const next = pendingBatchesRef.current.shift();
+                syncPendingBatches();
+                if (!next)
+                    break;
+                logger.info(`starting queued batch: ${next.label}`);
+                try {
+                    await next.run();
+                }
+                catch (err) {
+                    logger.error(`batch "${next.label}" failed: ${err}`);
+                }
+            }
+        }
+        finally {
+            isBatchRunningRef.current = false;
+            if (stopAllBatchesRef.current && pendingBatchesRef.current.length > 0) {
+                pendingBatchesRef.current = [];
+                syncPendingBatches();
+            }
+        }
+    };
     const updateBatchProgress = (completedCount: number, totalCount: number) => {
         const safeTotalCount = Math.max(0, totalCount);
         const safeCompletedCount = Math.min(Math.max(0, completedCount), safeTotalCount);
@@ -113,7 +174,7 @@ export function useDownload() {
         const customTidalApi = typeof settings.customTidalApi === "string" && settings.customTidalApi.trim().startsWith("https://")
             ? settings.customTidalApi.trim().replace(/\/+$/g, "")
             : undefined;
-        const customQobuzApi = typeof settings.customQobuzApi === "string" && settings.customQobuzApi.trim().startsWith("https://")
+        const customQobuzApi = typeof settings.customQobuzApi === "string" && /^https?:\/\//.test(settings.customQobuzApi.trim())
             ? settings.customQobuzApi.trim().replace(/\/+$/g, "")
             : undefined;
         let outputDir = settings.downloadPath;
@@ -359,6 +420,7 @@ export function useDownload() {
                         logger.debug(`trying qobuz for: ${trackName} - ${artistName}`);
                         const response = await downloadTrack({
                             service: "qobuz",
+                            duration: durationSeconds,
                             query,
                             track_name: trackName,
                             artist_name: displayArtist,
@@ -479,7 +541,7 @@ export function useDownload() {
         const customTidalApi = typeof settings.customTidalApi === "string" && settings.customTidalApi.trim().startsWith("https://")
             ? settings.customTidalApi.trim().replace(/\/+$/g, "")
             : undefined;
-        const customQobuzApi = typeof settings.customQobuzApi === "string" && settings.customQobuzApi.trim().startsWith("https://")
+        const customQobuzApi = typeof settings.customQobuzApi === "string" && /^https?:\/\//.test(settings.customQobuzApi.trim())
             ? settings.customQobuzApi.trim().replace(/\/+$/g, "")
             : undefined;
         let outputDir = settings.downloadPath;
@@ -682,6 +744,7 @@ export function useDownload() {
                         logger.debug(`trying qobuz for: ${trackName} - ${artistName}`);
                         const response = await downloadTrack({
                             service: "qobuz",
+                            duration: durationSeconds,
                             query,
                             track_name: trackName,
                             artist_name: displayArtist,
@@ -700,7 +763,6 @@ export function useDownload() {
                             spotify_id: spotifyId,
                             embed_lyrics: settings.embedLyrics,
                             embed_max_quality_cover: settings.embedMaxQualityCover,
-                            duration: durationSeconds,
                             item_id: itemID,
                             audio_format: qobuzQuality,
                             qobuz_api_url: customQobuzApi,
@@ -848,6 +910,15 @@ export function useDownload() {
             toast.error("No tracks selected");
             return;
         }
+        const tracksSnapshot = [...selectedTracks];
+        const allTracksSnapshot = [...allTracks];
+        const label = folderName || `${tracksSnapshot.length} selected tracks`;
+        await enqueueBatch(label, tracksSnapshot.length, "selected", () => runDownloadSelected(tracksSnapshot, allTracksSnapshot, folderName, isAlbum));
+    };
+    const runDownloadSelected = async (selectedTracks: string[], allTracks: TrackMetadata[], folderName?: string, isAlbum?: boolean) => {
+        if (selectedTracks.length === 0) {
+            return;
+        }
         logger.info(`starting batch download: ${selectedTracks.length} selected tracks`);
         const settings = getSettings();
         setIsDownloading(true);
@@ -931,10 +1002,14 @@ export function useDownload() {
         const total = selectedTracks.length;
         const failedErrorMessages = new Map<string, string>();
         updateBatchProgress(skippedCount, total);
-        for (let i = 0; i < tracksToDownload.length; i++) {
+        const concurrency = Math.max(1, Math.min(10, Number(settings.concurrentDownloads) || 3));
+        let nextTrackIndex = 0;
+        const downloadWorker = async (): Promise<void> => {
+          while (true) {
+            const i = nextTrackIndex++;
+            if (i >= tracksToDownload.length) return;
             if (shouldStopDownloadRef.current) {
-                toast.info(`Download stopped. ${successCount} tracks downloaded, ${tracksToDownload.length - i} remaining.`);
-                break;
+                return;
             }
             const track = tracksToDownload[i];
             const id = track.spotify_id || "";
@@ -947,8 +1022,8 @@ export function useDownload() {
                 const releaseYear = track.release_date?.substring(0, 4);
                 const response = await downloadWithItemID(settings, itemID, track.name, track.artists, track.album_name, folderName, originalIndex + 1, track.spotify_id, track.duration_ms, isAlbum, releaseYear, track.album_artist || "", track.release_date, track.images, track.track_number, track.disc_number, track.total_tracks, track.total_discs, track.copyright, track.publisher);
                 if (response.cancelled || shouldStopDownloadRef.current) {
-                    toast.info(`Download stopped. ${successCount} tracks downloaded, ${tracksToDownload.length - i} remaining.`);
-                    break;
+                    shouldStopDownloadRef.current = true;
+                    return;
                 }
                 if (response.success) {
                     if (response.already_exists) {
@@ -981,7 +1056,8 @@ export function useDownload() {
                         toast.info(response.error || "Servers on a scheduled break. Pausing downloads.");
                         logger.info(`cooldown detected, pausing queue with ${remaining} track(s) remaining`);
                         updateBatchProgress(skippedCount + successCount + errorCount, total);
-                        break;
+                        shouldStopDownloadRef.current = true;
+                        return;
                     }
                 }
             }
@@ -1000,12 +1076,15 @@ export function useDownload() {
                     toast.info("Servers on a scheduled break. Pausing downloads.");
                     logger.info(`cooldown detected, pausing queue with ${remaining} track(s) remaining`);
                     updateBatchProgress(skippedCount + successCount + errorCount, total);
-                    break;
+                    shouldStopDownloadRef.current = true;
+                    return;
                 }
             }
             const completedCount = skippedCount + successCount + errorCount;
             updateBatchProgress(completedCount, total);
-        }
+          }
+        };
+        await Promise.all(Array.from({ length: Math.min(concurrency, tracksToDownload.length) }, () => downloadWorker()));
         setDownloadingTrack(null);
         setCurrentDownloadInfo(null);
         setIsDownloading(false);
@@ -1097,6 +1176,15 @@ export function useDownload() {
             toast.error("No tracks available for download");
             return;
         }
+        const tracksSnapshot = [...tracks];
+        const label = folderName || `${tracksWithId.length} tracks`;
+        await enqueueBatch(label, tracksWithId.length, "all", () => runDownloadAll(tracksSnapshot, folderName, isAlbum));
+    };
+    const runDownloadAll = async (tracks: TrackMetadata[], folderName?: string, isAlbum?: boolean) => {
+        const tracksWithId = tracks.filter((track) => track.spotify_id);
+        if (tracksWithId.length === 0) {
+            return;
+        }
         logger.info(`starting batch download: ${tracksWithId.length} tracks`);
         const settings = getSettings();
         setIsDownloading(true);
@@ -1175,10 +1263,14 @@ export function useDownload() {
         const total = tracksWithId.length;
         const failedErrorMessages = new Map<string, string>();
         updateBatchProgress(skippedCount, total);
-        for (let i = 0; i < tracksToDownload.length; i++) {
+        const concurrency = Math.max(1, Math.min(10, Number(settings.concurrentDownloads) || 3));
+        let nextTrackIndex = 0;
+        const downloadWorker = async (): Promise<void> => {
+          while (true) {
+            const i = nextTrackIndex++;
+            if (i >= tracksToDownload.length) return;
             if (shouldStopDownloadRef.current) {
-                toast.info(`Download stopped. ${successCount} tracks downloaded, ${tracksToDownload.length - i} remaining.`);
-                break;
+                return;
             }
             const track = tracksToDownload[i];
             const originalIndex = tracksWithId.findIndex((t) => t.spotify_id === track.spotify_id);
@@ -1191,8 +1283,8 @@ export function useDownload() {
                 const releaseYear = track.release_date?.substring(0, 4);
                 const response = await downloadWithItemID(settings, itemID, track.name, track.artists, track.album_name, folderName, originalIndex + 1, track.spotify_id, track.duration_ms, isAlbum, releaseYear, track.album_artist || "", track.release_date, track.images, track.track_number, track.disc_number, track.total_tracks, track.total_discs, track.copyright, track.publisher);
                 if (response.cancelled || shouldStopDownloadRef.current) {
-                    toast.info(`Download stopped. ${successCount} tracks downloaded, ${tracksToDownload.length - i} remaining.`);
-                    break;
+                    shouldStopDownloadRef.current = true;
+                    return;
                 }
                 if (response.success) {
                     if (response.already_exists) {
@@ -1224,7 +1316,8 @@ export function useDownload() {
                         toast.info(response.error || "Servers on a scheduled break. Pausing downloads.");
                         logger.info(`cooldown detected, pausing queue with ${remaining} track(s) remaining`);
                         updateBatchProgress(skippedCount + successCount + errorCount, total);
-                        break;
+                        shouldStopDownloadRef.current = true;
+                        return;
                     }
                 }
             }
@@ -1241,12 +1334,15 @@ export function useDownload() {
                     toast.info("Servers on a scheduled break. Pausing downloads.");
                     logger.info(`cooldown detected, pausing queue with ${remaining} track(s) remaining`);
                     updateBatchProgress(skippedCount + successCount + errorCount, total);
-                    break;
+                    shouldStopDownloadRef.current = true;
+                    return;
                 }
             }
             const completedCount = skippedCount + successCount + errorCount;
             updateBatchProgress(completedCount, total);
-        }
+          }
+        };
+        await Promise.all(Array.from({ length: Math.min(concurrency, tracksToDownload.length) }, () => downloadWorker()));
         setDownloadingTrack(null);
         setCurrentDownloadInfo(null);
         setIsDownloading(false);
@@ -1332,6 +1428,12 @@ export function useDownload() {
     const handleStopDownload = () => {
         logger.info("download stopped by user");
         shouldStopDownloadRef.current = true;
+        stopAllBatchesRef.current = true;
+        if (pendingBatchesRef.current.length > 0) {
+            logger.info(`clearing ${pendingBatchesRef.current.length} queued batch(es)`);
+            pendingBatchesRef.current = [];
+            syncPendingBatches();
+        }
         void (async () => {
             try {
                 const { ForceStopDownloads } = await import("../../wailsjs/go/main/App");
@@ -1358,6 +1460,8 @@ export function useDownload() {
         failedTracks,
         skippedTracks,
         currentDownloadInfo,
+        pendingBatches,
+        removePendingBatch,
         handleDownloadTrack,
         handleDownloadSelected,
         handleDownloadAll,

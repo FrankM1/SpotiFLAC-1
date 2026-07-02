@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Download, FolderOpen, ImageDown, FileText, BadgeCheck, XCircle, Filter, CloudDownload, CheckCheck } from "lucide-react";
+import { Download, FolderOpen, ImageDown, FileText, BadgeCheck, ListPlus, XCircle, Filter, CloudDownload, CheckCheck } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { SearchAndSort } from "./SearchAndSort";
@@ -98,7 +98,7 @@ interface ArtistInfoProps {
     onTrackClick?: (track: TrackMetadata) => void;
     onBack?: () => void;
 }
-export function ArtistInfo({ artistInfo, albumList, trackList, searchQuery, sortBy, selectedTracks, downloadedTracks, failedTracks, skippedTracks, downloadingTrack, isDownloading, bulkDownloadType, downloadProgress, downloadRemainingCount, currentDownloadInfo, currentPage, itemsPerPage, downloadedLyrics, failedLyrics, skippedLyrics, downloadingLyricsTrack, checkingAvailabilityTrack, availabilityMap, downloadedCovers, failedCovers, skippedCovers, downloadingCoverTrack, isBulkDownloadingCovers, isBulkDownloadingLyrics, isMetadataLoading = false, onSearchChange, onSortChange, onToggleTrack, onToggleSelectAll, onSelectTrackRange, onDownloadTrack, onDownloadLyrics, onDownloadCover, onCheckAvailability, onDownloadAllLyrics, onDownloadAllCovers, onDownloadAll, onDownloadSelected, onStopDownload, onOpenFolder, onAlbumClick, onArtistClick, onPageChange, onTrackClick, onBack, }: ArtistInfoProps) {
+export function ArtistInfo({ artistInfo, albumList, trackList, searchQuery, sortBy, selectedTracks, downloadedTracks, failedTracks, skippedTracks, downloadingTrack, isDownloading, downloadProgress, downloadRemainingCount, currentDownloadInfo, currentPage, itemsPerPage, downloadedLyrics, failedLyrics, skippedLyrics, downloadingLyricsTrack, checkingAvailabilityTrack, availabilityMap, downloadedCovers, failedCovers, skippedCovers, downloadingCoverTrack, isBulkDownloadingCovers, isBulkDownloadingLyrics, isMetadataLoading = false, onSearchChange, onSortChange, onToggleTrack, onToggleSelectAll, onSelectTrackRange, onDownloadTrack, onDownloadLyrics, onDownloadCover, onCheckAvailability, onDownloadAllLyrics, onDownloadAllCovers, onDownloadAll, onDownloadSelected, onStopDownload, onOpenFolder, onAlbumClick, onArtistClick, onPageChange, onTrackClick, onBack, }: ArtistInfoProps) {
     const [downloadingHeader, setDownloadingHeader] = useState(false);
     const [downloadingAvatar, setDownloadingAvatar] = useState(false);
     const [downloadingGalleryIndex, setDownloadingGalleryIndex] = useState<number | null>(null);
@@ -516,13 +516,13 @@ export function ArtistInfo({ artistInfo, albumList, trackList, searchQuery, sort
                     <CheckCheck className="h-4 w-4"/>
                     {allDiscographySelected ? "Deselect All" : "Select All"}
                 </Button>)}
-                <Button onClick={onDownloadAll} size="sm" disabled={isDownloading}>
-                    {isDownloading && bulkDownloadType === "all" ? (<Spinner />) : (<Download className="h-4 w-4"/>)}
-                    Download Discography
+                <Button onClick={onDownloadAll} size="sm">
+                    {isDownloading ? (<ListPlus className="h-4 w-4"/>) : (<Download className="h-4 w-4"/>)}
+                    {isDownloading ? "Queue Discography" : "Download Discography"}
                 </Button>
-                {selectedTracks.length > 0 && (<Button onClick={onDownloadSelected} size="sm" variant="secondary" disabled={isDownloading}>
-                        {isDownloading && bulkDownloadType === "selected" ? (<Spinner />) : (<Download className="h-4 w-4"/>)}
-                        Download Selected ({selectedTracks.length})
+                {selectedTracks.length > 0 && (<Button onClick={onDownloadSelected} size="sm" variant="secondary">
+                        {isDownloading ? (<ListPlus className="h-4 w-4"/>) : (<Download className="h-4 w-4"/>)}
+                        {isDownloading ? "Queue Selected" : "Download Selected"} ({selectedTracks.length})
                     </Button>)}
             </div>
           </div>
@@ -652,13 +652,13 @@ export function ArtistInfo({ artistInfo, albumList, trackList, searchQuery, sort
                       </ScrollArea>
                   </DialogContent>
               </Dialog>
-              <Button onClick={onDownloadAll} size="sm" disabled={isDownloading}>
-                {isDownloading && bulkDownloadType === "all" ? (<Spinner />) : (<Download className="h-4 w-4"/>)}
-                Download All
+              <Button onClick={onDownloadAll} size="sm">
+                {isDownloading ? (<ListPlus className="h-4 w-4"/>) : (<Download className="h-4 w-4"/>)}
+                {isDownloading ? "Add to Queue" : "Download All"}
               </Button>
-              {selectedTracks.length > 0 && (<Button onClick={onDownloadSelected} size="sm" variant="secondary" disabled={isDownloading}>
-                  {isDownloading && bulkDownloadType === "selected" ? (<Spinner />) : (<Download className="h-4 w-4"/>)}
-                  Download Selected ({selectedTracks.length.toLocaleString()})
+              {selectedTracks.length > 0 && (<Button onClick={onDownloadSelected} size="sm" variant="secondary">
+                  {isDownloading ? (<ListPlus className="h-4 w-4"/>) : (<Download className="h-4 w-4"/>)}
+                  {isDownloading ? "Queue Selected" : "Download Selected"} ({selectedTracks.length.toLocaleString()})
                 </Button>)}
               {onDownloadAllLyrics && (<Tooltip>
                   <TooltipTrigger asChild>
