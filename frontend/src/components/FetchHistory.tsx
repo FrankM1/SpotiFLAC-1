@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 import { X, Music2, Disc3, ListMusic, UserRound } from "lucide-react";
 export interface HistoryItem {
     id: string;
@@ -20,13 +21,13 @@ export function FetchHistory({ history, onSelect, onRemove }: FetchHistoryProps)
     const getTypeLabel = (type: string) => {
         switch (type) {
             case "track":
-                return "Track";
+                return t("translation.artistInfo.track");
             case "album":
-                return "Album";
+                return t("translation.common.album");
             case "playlist":
-                return "Playlist";
+                return t("translation.playlistInfo.playlist");
             case "artist":
-                return "Artist";
+                return t("translation.common.artist");
             default:
                 return type;
         }
@@ -60,7 +61,7 @@ export function FetchHistory({ history, onSelect, onRemove }: FetchHistoryProps)
         }
     };
     return (<div className="space-y-2">
-      <span className="text-sm text-muted-foreground">{history.length === 1 ? "Recent Fetch" : "Recent Fetches"}</span>
+      <span className="text-sm text-muted-foreground">{history.length === 1 ? t("translation.migrated.FetchHistory.recentFetch") : t("translation.migrated.FetchHistory.recentFetches")}</span>
       <div className="flex gap-2 overflow-x-auto pb-2 pt-2">
         {history.map((item) => (<div key={item.id} className="relative shrink-0 w-[130px] group cursor-pointer rounded-lg border bg-card hover:bg-accent transition-colors overflow-visible" onClick={() => onSelect(item)}>
             <button type="button" className="absolute -top-1.5 -right-1.5 z-10 w-5 h-5 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all cursor-pointer shadow-sm" onClick={(e) => {
@@ -72,12 +73,12 @@ export function FetchHistory({ history, onSelect, onRemove }: FetchHistoryProps)
             <div className="p-2">
               <div className="aspect-square w-full rounded-md overflow-hidden mb-2 bg-muted">
                 {item.image ? (<img src={item.image} alt={item.name} className="w-full h-full object-cover"/>) : (<div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs">
-                    No Image
+                    {t("translation.fetchHistory.noImage")}
                   </div>)}
               </div>
               <div className="space-y-0.5">
                 <div className="flex items-center gap-1 min-w-0">
-                  {item.is_explicit ? <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded bg-red-600 text-[9px] font-bold text-white" title="Explicit">E</span> : null}
+                  {item.is_explicit ? <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded bg-red-600 text-[9px] font-bold text-white" title={t("translation.common.explicit")}>E</span> : null}
                   <p className="min-w-0 text-xs font-medium truncate" title={item.name}>
                     {item.name}
                   </p>

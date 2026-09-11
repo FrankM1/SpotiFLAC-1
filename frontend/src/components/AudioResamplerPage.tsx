@@ -1,8 +1,9 @@
 import { useState, useCallback, useEffect } from "react";
+import { t, translateMessage } from "@/i18n";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { Upload, X, CheckCircle2, AlertCircle, Trash2, FileMusic } from "lucide-react";
+import { Upload, X, CircleCheckBig, AlertCircle, Trash2, FileMusic } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { SelectAudioFiles, SelectFolder, ListAudioFilesInDir, ResampleAudio } from "../../wailsjs/go/main/App";
 import { toastWithSound as toast } from "@/lib/toast-with-sound";
@@ -37,14 +38,14 @@ function formatSampleRate(sr: number): string {
     return `${sr}Hz`;
 }
 const SAMPLE_RATE_OPTIONS = [
-    { value: "44100", label: "44.1kHz" },
-    { value: "48000", label: "48kHz" },
-    { value: "96000", label: "96kHz" },
-    { value: "192000", label: "192kHz" },
+    { value: "44100", label: t("literal.audioResampler.value441khz") },
+    { value: "48000", label: t("literal.audioResampler.48khz") },
+    { value: "96000", label: t("literal.audioResampler.96khz") },
+    { value: "192000", label: t("literal.audioResampler.192khz") },
 ];
 const BIT_DEPTH_OPTIONS = [
-    { value: "16", label: "16-bit" },
-    { value: "24", label: "24-bit" },
+    { value: "16", label: t("literal.common.value16Bit") },
+    { value: "24", label: t("literal.common.value24Bit") },
 ];
 const STORAGE_KEY = "spotiflac_audio_resampler_state";
 export function AudioResamplerPage() {
@@ -91,7 +92,6 @@ export function AudioResamplerPage() {
     });
     const [resampling, setResampling] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
-    const [isFullscreen, setIsFullscreen] = useState(false);
     const saveState = useCallback((stateToSave: {
         files: AudioFile[];
         sampleRate: string;
@@ -107,19 +107,6 @@ export function AudioResamplerPage() {
     useEffect(() => {
         saveState({ files, sampleRate, bitDepth });
     }, [files, sampleRate, bitDepth, saveState]);
-    useEffect(() => {
-        const checkFullscreen = () => {
-            const isMaximized = window.innerHeight >= window.screen.height * 0.9;
-            setIsFullscreen(isMaximized);
-        };
-        checkFullscreen();
-        window.addEventListener("resize", checkFullscreen);
-        window.addEventListener("focus", checkFullscreen);
-        return () => {
-            window.removeEventListener("resize", checkFullscreen);
-            window.removeEventListener("focus", checkFullscreen);
-        };
-    }, []);
     const fetchAudioInfo = useCallback(async (paths: string[]) => {
         if (paths.length === 0)
             return;
@@ -154,8 +141,8 @@ export function AudioResamplerPage() {
             }
         }
         catch (err) {
-            toast.error("File Selection Failed", {
-                description: err instanceof Error ? err.message : "Failed to select files",
+            toast.error(t("translation.common.fileSelectionFailed"), {
+                description: err instanceof Error ? translateMessage(err.message) : t("translation.audioConverter.failedSelectFiles"),
             });
         }
     };
@@ -168,15 +155,15 @@ export function AudioResamplerPage() {
                     addFiles(folderFiles.map((f) => f.path));
                 }
                 else {
-                    toast.info("No audio files found", {
-                        description: "No FLAC files found in the selected folder.",
+                    toast.info(t("translation.common.noAudioFilesFound"), {
+                        description: t("translation.audioResampler.noFlacFilesFoundSelected"),
                     });
                 }
             }
         }
         catch (err) {
-            toast.error("Folder Selection Failed", {
-                description: err instanceof Error ? err.message : "Failed to select folder",
+            toast.error(t("translation.common.folderSelectionFailed"), {
+                description: err instanceof Error ? translateMessage(err.message) : t("translation.fileManager.failedSelectFolder"),
             });
         }
     };
@@ -187,8 +174,8 @@ export function AudioResamplerPage() {
             return !validExtensions.includes(ext);
         });
         if (invalidFiles.length > 0) {
-            toast.error("Unsupported format", {
-                description: "Only FLAC files are supported for resampling.",
+            toast.error(t("translation.common.unsupportedFormat"), {
+                description: t("translation.audioResampler.onlyFlacFilesSupportedResampling"),
             });
         }
         const GetFileSizes = (files: string[]): Promise<Record<string, number>> => (window as any)["go"]["main"]["App"]["GetFileSizes"](files);
@@ -216,15 +203,15 @@ export function AudioResamplerPage() {
             if (newFiles.length > 0) {
                 if (paths.length > newFiles.length + invalidFiles.length) {
                     const skipped = paths.length - newFiles.length - invalidFiles.length;
-                    toast.info("Some files skipped", {
-                        description: `${skipped} file(s) were already added`,
+                    toast.info(t("translation.common.someFilesSkipped"), {
+                        description: t("translation.resampler.skipped", { count: skipped }),
                     });
                 }
                 return [...prev, ...newFiles];
             }
             if (validPaths.length > 0 && newFiles.length === 0) {
-                toast.info("No new files added", {
-                    description: "All valid files were already added",
+                toast.info(t("translation.common.noNewFilesAdded"), {
+                    description: t("translation.audioResampler.allValidFilesWereAlready"),
                 });
             }
             return prev;
@@ -257,8 +244,8 @@ export function AudioResamplerPage() {
     };
     const handleResample = async () => {
         if (files.length === 0) {
-            toast.error("No files selected", {
-                description: "Please add FLAC files to resample",
+            toast.error(t("translation.common.noFilesSelected"), {
+                description: t("translation.audioResampler.pleaseAddFlacFilesResample"),
             });
             return;
         }
@@ -282,7 +269,7 @@ export function AudioResamplerPage() {
                     return {
                         ...f,
                         status: result.success ? "success" : "error",
-                        error: result.error,
+                        error: result.error ? translateMessage(result.error) : undefined,
                         outputPath: result.output_file,
                     };
                 }
@@ -291,21 +278,21 @@ export function AudioResamplerPage() {
             const successCount = results.filter((r: any) => r.success).length;
             const failCount = results.filter((r: any) => !r.success).length;
             if (successCount > 0) {
-                toast.success("Resampling Complete", {
-                    description: `Successfully resampled ${successCount} file(s)${failCount > 0 ? `, ${failCount} failed` : ""}`,
+                toast.success(t("translation.audioResampler.resamplingComplete"), {
+                    description: t("translation.resampler.success", { count: successCount, failures: failCount > 0 ? t("translation.common.failures", { count: failCount }) : "" }),
                 });
             }
             else if (failCount > 0) {
-                toast.error("Resampling Failed", {
-                    description: `All ${failCount} file(s) failed to resample`,
+                toast.error(t("translation.audioResampler.resamplingFailed"), {
+                    description: t("translation.resampler.allFailed", { count: failCount }),
                 });
             }
         }
         catch (err) {
-            toast.error("Resampling Error", {
-                description: err instanceof Error ? err.message : "Unknown error",
+            toast.error(t("translation.audioResampler.resamplingError"), {
+                description: err instanceof Error ? translateMessage(err.message) : t("translation.audioConverter.unknownError"),
             });
-            setFiles((prev) => prev.map((f) => ({ ...f, status: "error" as const, error: "Resampling failed" })));
+            setFiles((prev) => prev.map((f) => ({ ...f, status: "error" as const, error: t("translation.audioResampler.resamplingFailed") })));
         }
         finally {
             setResampling(false);
@@ -316,7 +303,7 @@ export function AudioResamplerPage() {
             case "resampling":
                 return <Spinner className="h-4 w-4 text-primary"/>;
             case "success":
-                return <CheckCircle2 className="h-4 w-4 text-green-500"/>;
+                return <CircleCheckBig className="h-4 w-4 text-green-500"/>;
             case "error":
                 return <AlertCircle className="h-4 w-4 text-destructive"/>;
             default:
@@ -325,29 +312,29 @@ export function AudioResamplerPage() {
     };
     const resampleableCount = files.filter((f) => f.status === "pending" || f.status === "success").length;
     const successCount = files.filter((f) => f.status === "success").length;
-    return (<div className={`space-y-6 ${isFullscreen ? "h-full flex flex-col" : ""}`}>
+    return (<div className="flex h-[calc(100dvh-5.5rem)] min-h-0 flex-col gap-6 md:h-[calc(100dvh-6.5rem)]">
 
-        <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold">Audio Resampler</h1>
+        <div className="flex shrink-0 items-center justify-between">
+            <h1 className="text-2xl font-bold">{t("translation.common.audioResampler")}</h1>
             {files.length > 0 && (<div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={handleSelectFiles}>
+                <Button variant="outline" onClick={handleSelectFiles}>
                     <Upload className="h-4 w-4"/>
-                    Add Files
+                    {t("translation.common.addFiles")}
                 </Button>
-                <Button variant="outline" size="sm" onClick={handleSelectFolder}>
+                <Button variant="outline" onClick={handleSelectFolder}>
                     <Upload className="h-4 w-4"/>
-                    Add Folder
+                    {t("translation.common.addFolder")}
                 </Button>
-                <Button variant="outline" size="sm" onClick={clearFiles} disabled={resampling}>
+                <Button variant="destructive" onClick={clearFiles} disabled={resampling}>
                     <Trash2 className="h-4 w-4"/>
-                    Clear All
+                    {t("translation.common.clearAll")}
                 </Button>
             </div>)}
         </div>
 
-        <div className={`flex flex-col items-center justify-center border-2 border-dashed rounded-lg transition-all ${isFullscreen ? "flex-1 min-h-[400px]" : "h-[400px]"} ${isDragging
-            ? "border-primary bg-primary/10"
-            : "border-muted-foreground/30"}`} onDragOver={(e) => {
+        <div className={`flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden transition-all ${files.length === 0
+            ? `rounded-lg border-2 border-dashed ${isDragging ? "border-primary bg-primary/10" : "border-muted-foreground/30"}`
+            : "rounded-lg border"}`} onDragOver={(e) => {
             e.preventDefault();
             setIsDragging(true);
         }} onDragLeave={(e) => {
@@ -363,27 +350,27 @@ export function AudioResamplerPage() {
                 </div>
                 <p className="text-sm text-muted-foreground mb-4 text-center">
                     {isDragging
-                ? "Drop your audio files here"
-                : "Drag and drop audio files here, or click the button below to select"}
+                ? t("translation.migrated.AudioResamplerPage.dropYourAudioFilesHere")
+                : t("translation.migrated.AudioResamplerPage.dragAndDropAudioFilesHereOr")}
                 </p>
                 <div className="flex gap-3">
-                    <Button onClick={handleSelectFiles} size="lg">
-                        <Upload className="h-5 w-5"/>
-                        Select Files
+                    <Button onClick={handleSelectFiles}>
+                        <Upload className="h-4 w-4"/>
+                        {t("translation.common.selectFiles")}
                     </Button>
-                    <Button onClick={handleSelectFolder} size="lg" variant="outline">
-                        <Upload className="h-5 w-5"/>
-                        Select Folder
+                    <Button onClick={handleSelectFolder} variant="outline">
+                        <Upload className="h-4 w-4"/>
+                        {t("translation.common.selectFolder")}
                     </Button>
                 </div>
                 <p className="text-xs text-muted-foreground mt-4 text-center">
-                    Supported format: FLAC
+                    {t("translation.audioResampler.supportedFormatFlac")}
                 </p>
             </>) : (<div className="w-full h-full p-6 space-y-4 flex flex-col">
                 <div className="space-y-2 pb-4 border-b shrink-0">
                     <div className="flex flex-wrap items-center gap-4">
                         <div className="flex items-center gap-2">
-                            <Label className="whitespace-nowrap">Bit Depth:</Label>
+                            <Label className="whitespace-nowrap">{t("translation.common.bitDepth")}</Label>
                             <ToggleGroup type="single" variant="outline" value={bitDepth} onValueChange={(value) => {
                 if (value)
                     setBitDepth(value);
@@ -395,7 +382,7 @@ export function AudioResamplerPage() {
                         </div>
 
                         <div className="flex items-center gap-2">
-                            <Label className="whitespace-nowrap">Sample Rate:</Label>
+                            <Label className="whitespace-nowrap">{t("translation.common.sampleRate")}</Label>
                             <ToggleGroup type="single" variant="outline" value={sampleRate} onValueChange={(value) => {
                 if (value)
                     setSampleRate(value);
@@ -410,7 +397,7 @@ export function AudioResamplerPage() {
 
                 <div className="flex items-center justify-between shrink-0">
                     <div className="text-sm text-muted-foreground">
-                        {files.length} file(s) • {successCount} resampled
+                        {files.length} {t("translation.common.file", { count: files.length })} • {successCount} {t("translation.audioResampler.resampled")}
                     </div>
                 </div>
 
@@ -434,7 +421,7 @@ export function AudioResamplerPage() {
                                     {srcSpec ? (<span className="text-xs font-medium text-primary bg-primary/10 rounded px-1.5 py-0.5 whitespace-nowrap shrink-0">
                                             {srcSpec}
                                         </span>) : file.status === "pending" ? (<span className="text-xs text-muted-foreground/50 whitespace-nowrap shrink-0">
-                                            reading...
+                                            {t("translation.audioResampler.reading")}
                                         </span>) : null}
 
                                     <span className="text-xs text-muted-foreground shrink-0">
@@ -443,7 +430,7 @@ export function AudioResamplerPage() {
                                     <span className="text-xs uppercase text-muted-foreground shrink-0">
                                         {file.format}
                                     </span>
-                                    {file.status !== "resampling" && (<Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => removeFile(file.path)} disabled={resampling}>
+                                    {file.status !== "resampling" && (<Button variant="ghost" size="icon" className="shrink-0" onClick={() => removeFile(file.path)} disabled={resampling}>
                                             <X className="h-4 w-4"/>
                                         </Button>)}
                                 </div>);
@@ -451,14 +438,14 @@ export function AudioResamplerPage() {
                 </div>
 
                 <div className="flex justify-center pt-4 border-t shrink-0">
-                    <Button onClick={handleResample} disabled={resampling || resampleableCount === 0} size="lg">
+                    <Button onClick={handleResample} disabled={resampling || resampleableCount === 0}>
                         {resampling ? (<>
                                 <Spinner className="h-4 w-4"/>
-                                Resampling...
+                                {t("translation.audioResampler.resampling")}
                             </>) : (<>
                                 <AudioLinesIcon size={16} className="text-primary-foreground"/>
-                                Resample{" "}
-                                {resampleableCount > 0 ? `${resampleableCount} File(s)` : ""}
+                                {t("translation.audioResampler.resample")}{" "}
+                                {resampleableCount > 0 ? t("translation.migrated.AudioResamplerPage.text", { value1: resampleableCount, value2: t("translation.common.fileTitle", { count: resampleableCount }) }) : ""}
                             </>)}
                     </Button>
                 </div>

@@ -67,6 +67,13 @@ func amazonCommunityNormalizeQuality(quality string) string {
 	}
 }
 
+func copyAmazonStream(dst io.Writer, resp *http.Response) (int64, error) {
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("Amazon stream returned status %d", resp.StatusCode)
+	}
+	return io.Copy(dst, resp.Body)
+}
+
 func (a *AmazonDownloader) downloadFromCommunity(amazonURL, outputDir, quality string) (string, error) {
 
 	if !AllowCommunityServers {
@@ -161,7 +168,7 @@ func (a *AmazonDownloader) downloadFromCommunity(amazonURL, outputDir, quality s
 
 	fmt.Printf("Downloading track: %s\n", asin)
 	pw := NewProgressWriter(out)
-	if _, err = io.Copy(pw, dlResp.Body); err != nil {
+	if _, err = copyAmazonStream(pw, dlResp); err != nil {
 		return "", err
 	}
 	out.Close()
@@ -241,7 +248,7 @@ func (a *AmazonDownloader) DownloadFromService(amazonURL, outputDir, quality str
 	return a.downloadFromCommunity(amazonURL, outputDir, quality)
 }
 
-func (a *AmazonDownloader) DownloadByURL(amazonURL, outputDir, quality, filenameFormat, playlistName, playlistOwner string, includeTrackNumber bool, position int, spotifyTrackName, spotifyArtistName, spotifyAlbumName, spotifyAlbumArtist, spotifyReleaseDate, spotifyCoverURL string, spotifyTrackNumber, spotifyDiscNumber, spotifyTotalTracks int, embedMaxQualityCover bool, spotifyTotalDiscs int, spotifyCopyright, spotifyPublisher, spotifyComposer, metadataSeparator, isrcOverride, spotifyURL string, useFirstArtistOnly bool, useSingleGenre bool, embedGenre bool) (string, error) {
+func (a *AmazonDownloader) DownloadByURL(amazonURL, outputDir, quality, filenameFormat, playlistName, playlistOwner string, includeTrackNumber bool, position int, spotifyTrackName, spotifyArtistName, spotifyAlbumName, spotifyAlbumArtist, spotifyReleaseDate, spotifyCoverURL string, spotifyTrackNumber, spotifyDiscNumber, spotifyTotalTracks int, embedMaxQualityCover bool, spotifyTotalDiscs int, spotifyCopyright, spotifyPublisher, spotifyComposer, metadataSeparator, isrcOverride, spotifyURL string, allowFallback bool, allowAtmosFallback bool, atmosFallbackQuality string, useFirstArtistOnly bool, useSingleGenre bool, embedGenre bool) (string, error) {
 
 	if outputDir != "." {
 		if err := os.MkdirAll(outputDir, 0755); err != nil {
@@ -311,6 +318,18 @@ func (a *AmazonDownloader) DownloadByURL(amazonURL, outputDir, quality, filename
 	a.SourceURL = amazonURL
 
 	filePath, err := a.DownloadFromService(amazonURL, outputDir, quality)
+	if err != nil && amazonCommunityNormalizeQuality(quality) == "atmos" && allowAtmosFallback {
+		fallbackQuality := "24"
+		if strings.TrimSpace(atmosFallbackQuality) == "16" {
+			fallbackQuality = "16"
+		}
+		fmt.Printf("Dolby Atmos unavailable/failed, falling back to %s-bit FLAC...\n", fallbackQuality)
+		filePath, err = a.DownloadFromService(amazonURL, outputDir, fallbackQuality)
+		if err != nil && fallbackQuality == "24" && allowFallback {
+			fmt.Println("24-bit FLAC unavailable/failed, falling back to 16-bit FLAC...")
+			filePath, err = a.DownloadFromService(amazonURL, outputDir, "16")
+		}
+	}
 	if err != nil {
 		return "", err
 	}
@@ -482,7 +501,7 @@ func (a *AmazonDownloader) DownloadByURL(amazonURL, outputDir, quality, filename
 }
 
 func (a *AmazonDownloader) DownloadBySpotifyID(spotifyTrackID, outputDir, quality, filenameFormat, playlistName, playlistOwner string, includeTrackNumber bool, position int, spotifyTrackName, spotifyArtistName, spotifyAlbumName, spotifyAlbumArtist, spotifyReleaseDate, spotifyCoverURL string, spotifyTrackNumber, spotifyDiscNumber, spotifyTotalTracks int, embedMaxQualityCover bool, spotifyTotalDiscs int, spotifyCopyright, spotifyPublisher, spotifyComposer, metadataSeparator, isrcOverride, spotifyURL string,
-	useFirstArtistOnly bool, useSingleGenre bool, embedGenre bool,
+	allowFallback bool, allowAtmosFallback bool, atmosFallbackQuality string, useFirstArtistOnly bool, useSingleGenre bool, embedGenre bool,
 ) (string, error) {
 
 	amazonURL, err := a.GetAmazonURLFromSpotify(spotifyTrackID)
@@ -490,5 +509,5 @@ func (a *AmazonDownloader) DownloadBySpotifyID(spotifyTrackID, outputDir, qualit
 		return "", err
 	}
 
-	return a.DownloadByURL(amazonURL, outputDir, quality, filenameFormat, playlistName, playlistOwner, includeTrackNumber, position, spotifyTrackName, spotifyArtistName, spotifyAlbumName, spotifyAlbumArtist, spotifyReleaseDate, spotifyCoverURL, spotifyTrackNumber, spotifyDiscNumber, spotifyTotalTracks, embedMaxQualityCover, spotifyTotalDiscs, spotifyCopyright, spotifyPublisher, spotifyComposer, metadataSeparator, isrcOverride, spotifyURL, useFirstArtistOnly, useSingleGenre, embedGenre)
+	return a.DownloadByURL(amazonURL, outputDir, quality, filenameFormat, playlistName, playlistOwner, includeTrackNumber, position, spotifyTrackName, spotifyArtistName, spotifyAlbumName, spotifyAlbumArtist, spotifyReleaseDate, spotifyCoverURL, spotifyTrackNumber, spotifyDiscNumber, spotifyTotalTracks, embedMaxQualityCover, spotifyTotalDiscs, spotifyCopyright, spotifyPublisher, spotifyComposer, metadataSeparator, isrcOverride, spotifyURL, allowFallback, allowAtmosFallback, atmosFallbackQuality, useFirstArtistOnly, useSingleGenre, embedGenre)
 }

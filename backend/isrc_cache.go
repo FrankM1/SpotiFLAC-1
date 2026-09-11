@@ -24,7 +24,7 @@ type isrcCacheEntry struct {
 
 var (
 	isrcCacheDB   *bolt.DB
-	isrcCacheDBMu sync.Mutex
+	isrcCacheDBMu sync.RWMutex
 )
 
 func InitISRCCacheDB() error {
@@ -68,35 +68,47 @@ func CloseISRCCacheDB() {
 	}
 }
 
+func withISRCCacheDB(operation func(*bolt.DB) error) error {
+	if err := InitISRCCacheDB(); err != nil {
+		return err
+	}
+
+	isrcCacheDBMu.RLock()
+	defer isrcCacheDBMu.RUnlock()
+
+	if isrcCacheDB == nil {
+		return fmt.Errorf("ISRC cache database is not available")
+	}
+	return operation(isrcCacheDB)
+}
+
 func GetCachedISRC(trackID string) (string, error) {
 	normalizedTrackID := strings.TrimSpace(trackID)
 	if normalizedTrackID == "" {
 		return "", nil
 	}
 
-	if err := InitISRCCacheDB(); err != nil {
-		return "", err
-	}
-
 	var cachedISRC string
-	err := isrcCacheDB.View(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket([]byte(isrcCacheBucket))
-		if bucket == nil {
+	err := withISRCCacheDB(func(db *bolt.DB) error {
+		return db.View(func(tx *bolt.Tx) error {
+			bucket := tx.Bucket([]byte(isrcCacheBucket))
+			if bucket == nil {
+				return nil
+			}
+
+			value := bucket.Get([]byte(normalizedTrackID))
+			if len(value) == 0 {
+				return nil
+			}
+
+			var entry isrcCacheEntry
+			if err := json.Unmarshal(value, &entry); err != nil {
+				return err
+			}
+
+			cachedISRC = strings.ToUpper(strings.TrimSpace(entry.ISRC))
 			return nil
-		}
-
-		value := bucket.Get([]byte(normalizedTrackID))
-		if len(value) == 0 {
-			return nil
-		}
-
-		var entry isrcCacheEntry
-		if err := json.Unmarshal(value, &entry); err != nil {
-			return err
-		}
-
-		cachedISRC = strings.ToUpper(strings.TrimSpace(entry.ISRC))
-		return nil
+		})
 	})
 	if err != nil {
 		return "", err
@@ -112,10 +124,6 @@ func PutCachedISRC(trackID string, isrc string) error {
 		return nil
 	}
 
-	if err := InitISRCCacheDB(); err != nil {
-		return err
-	}
-
 	entry := isrcCacheEntry{
 		TrackID:   normalizedTrackID,
 		ISRC:      normalizedISRC,
@@ -127,11 +135,13 @@ func PutCachedISRC(trackID string, isrc string) error {
 		return fmt.Errorf("failed to encode ISRC cache entry: %w", err)
 	}
 
-	return isrcCacheDB.Update(func(tx *bolt.Tx) error {
-		bucket, err := tx.CreateBucketIfNotExists([]byte(isrcCacheBucket))
-		if err != nil {
-			return err
-		}
-		return bucket.Put([]byte(normalizedTrackID), payload)
+	return withISRCCacheDB(func(db *bolt.DB) error {
+		return db.Update(func(tx *bolt.Tx) error {
+			bucket, err := tx.CreateBucketIfNotExists([]byte(isrcCacheBucket))
+			if err != nil {
+				return err
+			}
+			return bucket.Put([]byte(normalizedTrackID), payload)
+		})
 	})
 }

@@ -1,45 +1,30 @@
-import { useRef, useState, type RefObject } from "react";
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { HomeIcon } from "@/components/ui/home";
 import { HistoryIcon } from "@/components/ui/history-icon";
+import { ListOrderedIcon } from "@/components/ui/list-ordered-icon";
 import { SettingsIcon } from "@/components/ui/settings";
-import { ActivityIcon, type ActivityIconHandle } from "@/components/ui/activity";
 import { TerminalIcon } from "@/components/ui/terminal";
-import { FileMusicIcon, type FileMusicIconHandle } from "@/components/ui/file-music";
-import { FilePenIcon, type FilePenIconHandle } from "@/components/ui/file-pen";
-import { FileTextIcon, type FileTextIconHandle } from "@/components/ui/file-text";
 import { BugReportIcon } from "@/components/ui/bug-report-icon";
 import { CoffeeIcon } from "@/components/ui/coffee";
 import { BlocksIcon } from "@/components/ui/blocks-icon";
-import { AudioLinesIcon, type AudioLinesIconHandle } from "@/components/ui/audio-lines";
 import { ToolCaseIcon } from "@/components/ui/tool-case";
-import { Download } from "lucide-react";
-import { useDownloadQueueData } from "@/hooks/useDownloadQueueData";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tooltip, TooltipContent, TooltipTrigger, } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { openExternal } from "@/lib/utils";
-export type PageType = "main" | "settings" | "debug" | "audio-analysis" | "audio-converter" | "audio-resampler" | "file-manager" | "lyrics-manager" | "projects" | "support" | "history";
+export type PageType = "main" | "settings" | "debug" | "tools" | "audio-analysis" | "tempo-key-analyzer" | "replaygain" | "audio-converter" | "audio-resampler" | "file-manager" | "lyrics-manager" | "enrich" | "projects" | "support" | "history" | "queue";
 interface SidebarProps {
     currentPage: PageType;
     onPageChange: (page: PageType) => void;
-    onOpenQueue: () => void;
+    queueBadgeCount?: number;
 }
-interface AnimatedIconHandle {
-    startAnimation: () => void;
-    stopAnimation: () => void;
-}
-export function Sidebar({ currentPage, onPageChange, onOpenQueue }: SidebarProps) {
-    const queueInfo = useDownloadQueueData();
-    const activeCount = queueInfo.queue.filter(item => item.status === "queued" || item.status === "downloading").length;
+const TOOL_PAGES: PageType[] = ["tools", "audio-analysis", "tempo-key-analyzer", "replaygain", "audio-converter", "audio-resampler", "file-manager", "lyrics-manager", "enrich"];
+export function Sidebar({ currentPage, onPageChange, queueBadgeCount = 0 }: SidebarProps) {
+    const { t } = useTranslation();
     const [isIssuesDialogOpen, setIsIssuesDialogOpen] = useState(false);
     const [hasIssueAgreement, setHasIssueAgreement] = useState(false);
-    const analyzerIconRef = useRef<ActivityIconHandle>(null);
-    const resamplerIconRef = useRef<AudioLinesIconHandle>(null);
-    const converterIconRef = useRef<FileMusicIconHandle>(null);
-    const fileManagerIconRef = useRef<FilePenIconHandle>(null);
-    const lyricsManagerIconRef = useRef<FileTextIconHandle>(null);
     const handleIssuesDialogChange = (open: boolean) => {
         setIsIssuesDialogOpen(open);
         if (!open) {
@@ -50,12 +35,6 @@ export function Sidebar({ currentPage, onPageChange, onOpenQueue }: SidebarProps
         openExternal("https://github.com/spotbye/SpotiFLAC/issues");
         handleIssuesDialogChange(false);
     };
-    const getAnimatedItemHandlers = <T extends AnimatedIconHandle>(iconRef: RefObject<T | null>) => ({
-        onMouseEnter: () => iconRef.current?.startAnimation(),
-        onMouseLeave: () => iconRef.current?.stopAnimation(),
-        onFocus: () => iconRef.current?.startAnimation(),
-        onBlur: () => iconRef.current?.stopAnimation(),
-    });
     return (<div className="fixed left-0 top-0 h-full w-14 bg-card border-r border-border flex flex-col items-center py-14 z-30">
             <div className="flex flex-col gap-2 flex-1">
                 <Tooltip delayDuration={0}>
@@ -65,22 +44,18 @@ export function Sidebar({ currentPage, onPageChange, onOpenQueue }: SidebarProps
                         </Button>
                     </TooltipTrigger>
                     <TooltipContent side="right">
-                        <p>Home</p>
+                        <p>{t("translation.sidebar.home")}</p>
                     </TooltipContent>
                 </Tooltip>
 
                 <Tooltip delayDuration={0}>
                     <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" className="relative h-10 w-10 hover:bg-primary/10 hover:text-primary" onClick={onOpenQueue}>
-                            <Download size={20} className={activeCount > 0 ? "text-primary" : undefined}/>
-                            {activeCount > 0 && (<span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-none text-primary-foreground tabular-nums">
-                                {activeCount > 99 ? "99+" : activeCount}
-                            </span>)}
+                        <Button variant={currentPage === "queue" ? "secondary" : "ghost"} size="icon" className={`relative h-10 w-10 ${currentPage === "queue" ? "bg-primary/10 text-primary hover:bg-primary/20" : "hover:bg-primary/10 hover:text-primary"}`} onClick={() => onPageChange("queue")}>
+                            <ListOrderedIcon size={20}/>
+                            {queueBadgeCount > 0 && (<span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">{queueBadgeCount > 99 ? "99+" : queueBadgeCount}</span>)}
                         </Button>
                     </TooltipTrigger>
-                    <TooltipContent side="right">
-                        <p>{activeCount > 0 ? `Download Queue (${activeCount} active)` : "Download Queue"}</p>
-                    </TooltipContent>
+                    <TooltipContent side="right"><p>{t("translation.queue.queue")}</p></TooltipContent>
                 </Tooltip>
 
                 <Tooltip delayDuration={0}>
@@ -90,7 +65,7 @@ export function Sidebar({ currentPage, onPageChange, onOpenQueue }: SidebarProps
                         </Button>
                     </TooltipTrigger>
                     <TooltipContent side="right">
-                        <p>History</p>
+                        <p>{t("translation.sidebar.history")}</p>
                     </TooltipContent>
                 </Tooltip>
 
@@ -101,7 +76,7 @@ export function Sidebar({ currentPage, onPageChange, onOpenQueue }: SidebarProps
                         </Button>
                     </TooltipTrigger>
                     <TooltipContent side="right">
-                        <p>Settings</p>
+                        <p>{t("translation.sidebar.settings")}</p>
                     </TooltipContent>
                 </Tooltip>
 
@@ -112,46 +87,20 @@ export function Sidebar({ currentPage, onPageChange, onOpenQueue }: SidebarProps
                         </Button>
                     </TooltipTrigger>
                     <TooltipContent side="right">
-                        <p>Debug Logs</p>
+                        <p>{t("translation.sidebar.debugLogs")}</p>
                     </TooltipContent>
                 </Tooltip>
 
-                <DropdownMenu>
-                    <Tooltip delayDuration={0}>
-                        <DropdownMenuTrigger asChild>
-                            <TooltipTrigger asChild>
-                                <Button variant={["audio-analysis", "audio-converter", "audio-resampler", "file-manager", "lyrics-manager"].includes(currentPage) ? "secondary" : "ghost"} size="icon" className={`h-10 w-10 ${["audio-analysis", "audio-converter", "audio-resampler", "file-manager", "lyrics-manager"].includes(currentPage) ? "bg-primary/10 text-primary hover:bg-primary/20" : "hover:bg-primary/10 hover:text-primary"}`}>
-                                    <ToolCaseIcon size={20}/>
-                                </Button>
-                            </TooltipTrigger>
-                        </DropdownMenuTrigger>
-                        <TooltipContent side="right">
-                            <p>Tools</p>
-                        </TooltipContent>
-                    </Tooltip>
-                    <DropdownMenuContent side="right" sideOffset={14} className="min-w-50 ml-2">
-                        <DropdownMenuItem onClick={() => onPageChange("audio-analysis")} className="gap-3 cursor-pointer py-2 px-3" {...getAnimatedItemHandlers(analyzerIconRef)}>
-                            <ActivityIcon ref={analyzerIconRef} size={16}/>
-                            <span>Audio Quality Analyzer</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onPageChange("audio-resampler")} className="gap-3 cursor-pointer py-2 px-3" {...getAnimatedItemHandlers(resamplerIconRef)}>
-                            <AudioLinesIcon ref={resamplerIconRef} size={16}/>
-                            <span>Audio Resampler</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onPageChange("audio-converter")} className="gap-3 cursor-pointer py-2 px-3" {...getAnimatedItemHandlers(converterIconRef)}>
-                            <FileMusicIcon ref={converterIconRef} size={16}/>
-                            <span>Audio Converter</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onPageChange("file-manager")} className="gap-3 cursor-pointer py-2 px-3" {...getAnimatedItemHandlers(fileManagerIconRef)}>
-                            <FilePenIcon ref={fileManagerIconRef} size={16}/>
-                            <span>File Manager</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onPageChange("lyrics-manager")} className="gap-3 cursor-pointer py-2 px-3" {...getAnimatedItemHandlers(lyricsManagerIconRef)}>
-                            <FileTextIcon ref={lyricsManagerIconRef} size={16}/>
-                            <span>Lyrics Manager</span>
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                <Tooltip delayDuration={0}>
+                    <TooltipTrigger asChild>
+                        <Button variant={TOOL_PAGES.includes(currentPage) ? "secondary" : "ghost"} size="icon" className={`h-10 w-10 ${TOOL_PAGES.includes(currentPage) ? "bg-primary/10 text-primary hover:bg-primary/20" : "hover:bg-primary/10 hover:text-primary"}`} onClick={() => onPageChange("tools")}>
+                            <ToolCaseIcon size={20}/>
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                        <p>{t("translation.sidebar.tools")}</p>
+                    </TooltipContent>
+                </Tooltip>
             </div>
 
             <div className="mt-auto flex flex-col gap-2">
@@ -163,37 +112,37 @@ export function Sidebar({ currentPage, onPageChange, onOpenQueue }: SidebarProps
                             </Button>
                         </TooltipTrigger>
                         <TooltipContent side="right">
-                            <p>Report Bugs or Request Features</p>
+                            <p>{t("translation.sidebar.reportBugsRequestFeatures")}</p>
                         </TooltipContent>
                     </Tooltip>
                     <DialogContent className="max-w-xl">
                         <DialogHeader>
-                            <DialogTitle>Before Opening GitHub Issues</DialogTitle>
+                            <DialogTitle>{t("translation.sidebar.beforeOpeningIssues")}</DialogTitle>
                             <DialogDescription />
                         </DialogHeader>
 
                         <div className="space-y-4 text-sm">
                             <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4">
-                                <p className="font-semibold text-amber-900 dark:text-amber-200">Important</p>
+                                <p className="font-semibold text-amber-900 dark:text-amber-200">{t("translation.sidebar.important")}</p>
                                 <p className="mt-1 text-amber-950/90 dark:text-amber-100/90">
-                                    Search existing issues first and use the issue template when opening a new report or request.
+                                    {t("translation.sidebar.searchIssuesFirst")}
                                 </p>
                             </div>
 
                             <label className="flex cursor-pointer items-center gap-3 rounded-lg border p-4">
                                 <Checkbox className="shrink-0" checked={hasIssueAgreement} onCheckedChange={(checked) => setHasIssueAgreement(checked === true)}/>
                                 <span className="leading-5 text-foreground/90">
-                                    I understand that I should use the issue template and avoid duplicate issues.
+                                    {t("translation.sidebar.issueAgreement")}
                                 </span>
                             </label>
                         </div>
 
                         <DialogFooter className="sm:justify-between gap-2">
                             <Button variant="outline" onClick={() => handleIssuesDialogChange(false)}>
-                                Cancel
+                                {t("translation.sidebar.cancel")}
                             </Button>
                             <Button disabled={!hasIssueAgreement} onClick={handleOpenIssues}>
-                                Open Issues
+                                {t("translation.sidebar.openIssues")}
                             </Button>
                         </DialogFooter>
                     </DialogContent>
@@ -206,7 +155,7 @@ export function Sidebar({ currentPage, onPageChange, onOpenQueue }: SidebarProps
                         </Button>
                     </TooltipTrigger>
                     <TooltipContent side="right">
-                        <p>Other Projects</p>
+                        <p>{t("translation.sidebar.otherProjects")}</p>
                     </TooltipContent>
                 </Tooltip>
 
@@ -217,7 +166,7 @@ export function Sidebar({ currentPage, onPageChange, onOpenQueue }: SidebarProps
                         </Button>
                     </TooltipTrigger>
                     <TooltipContent side="right">
-                        <p>Support Me</p>
+                        <p>{t("translation.sidebar.supportMe")}</p>
                     </TooltipContent>
                 </Tooltip>
             </div>

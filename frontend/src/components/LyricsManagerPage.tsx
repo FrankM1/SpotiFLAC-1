@@ -1,8 +1,10 @@
 import { useState, useCallback, useEffect } from "react";
+import { t, translateMessage } from "@/i18n";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Upload, X, FileText, Trash2, AlertCircle, Music, Clock, Download, FolderOpen, Save, Undo2, Redo2, Pencil, Type } from "lucide-react";
+import { Upload, X, FileText, FileMusic, Trash2, AlertCircle, Music, Clock, Download, FolderOpen, Save, Undo2, Redo2, Pencil, Type, ScanText, MicVocal } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
+import { Progress } from "@/components/ui/progress";
 import { ReadEmbeddedLyrics, SelectLyricsFiles, ExtractLyricsToLRC, SelectLyricsFolder, ScanLyricsFolder, SaveLyrics } from "../../wailsjs/go/main/App";
 import { toastWithSound as toast } from "@/lib/toast-with-sound";
 import { OnFileDrop, OnFileDropOff } from "../../wailsjs/runtime/runtime";
@@ -16,12 +18,40 @@ interface LyricsFile {
     future: string[];
     source: string;
     synced: boolean;
-    status: "loading" | "loaded" | "empty" | "error";
+    status: "pending" | "loading" | "loaded" | "empty" | "error";
     error?: string;
 }
 const SUPPORTED_EXTENSIONS = [".lrc", ".txt", ".flac", ".mp3", ".m4a", ".aac", ".opus", ".ogg"];
 const EDITABLE_EXTENSIONS = [".lrc", ".txt", ".flac", ".mp3", ".m4a"];
 const LRC_TIMESTAMP_RE = /\[\d{1,2}:\d{2}(?:\.\d{1,3})?\]/;
+const STORAGE_KEY = "spotiflac_lyrics_manager_state";
+interface LyricsManagerState {
+    files: LyricsFile[];
+    selectedPath: string | null;
+    editMode: boolean;
+}
+function loadSavedState(): LyricsManagerState {
+    try {
+        const saved = sessionStorage.getItem(STORAGE_KEY);
+        if (!saved)
+            return { files: [], selectedPath: null, editMode: false };
+        const parsed = JSON.parse(saved) as Partial<LyricsManagerState>;
+        const files = Array.isArray(parsed.files)
+            ? parsed.files.filter((file) => file && typeof file.path === "string").map((file) => ({
+                ...file,
+                status: file.status === "loading" ? "pending" as const : file.status,
+            })) as LyricsFile[]
+            : [];
+        const selectedPath = typeof parsed.selectedPath === "string" && files.some((file) => file.path === parsed.selectedPath)
+            ? parsed.selectedPath
+            : files[0]?.path ?? null;
+        return { files, selectedPath, editMode: parsed.editMode === true };
+    }
+    catch (error) {
+        console.error("Failed to load Lyrics Manager state:", error);
+        return { files: [], selectedPath: null, editMode: false };
+    }
+}
 function getExtension(path: string): string {
     const lower = path.toLowerCase();
     const dot = lower.lastIndexOf(".");
@@ -38,31 +68,28 @@ function stripTimestamps(lyrics: string): string {
         .join("\n");
 }
 export function LyricsManagerPage() {
-    const [files, setFiles] = useState<LyricsFile[]>([]);
-    const [selectedPath, setSelectedPath] = useState<string | null>(null);
+    const [files, setFiles] = useState<LyricsFile[]>(() => loadSavedState().files);
+    const [selectedPath, setSelectedPath] = useState<string | null>(() => loadSavedState().selectedPath);
     const [isDragging, setIsDragging] = useState(false);
-    const [isFullscreen, setIsFullscreen] = useState(false);
     const [extracting, setExtracting] = useState(false);
     const [saving, setSaving] = useState(false);
-    const [editMode, setEditMode] = useState(false);
+    const [scanning, setScanning] = useState(false);
+    const [scanProgress, setScanProgress] = useState({ current: 0, total: 0 });
+    const [editMode, setEditMode] = useState(() => loadSavedState().editMode);
     useEffect(() => {
-        const checkFullscreen = () => {
-            setIsFullscreen(window.innerHeight >= window.screen.height * 0.9);
-        };
-        checkFullscreen();
-        window.addEventListener("resize", checkFullscreen);
-        window.addEventListener("focus", checkFullscreen);
-        return () => {
-            window.removeEventListener("resize", checkFullscreen);
-            window.removeEventListener("focus", checkFullscreen);
-        };
-    }, []);
+        try {
+            sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ files, selectedPath, editMode } satisfies LyricsManagerState));
+        }
+        catch (error) {
+            console.error("Failed to save Lyrics Manager state:", error);
+        }
+    }, [files, selectedPath, editMode]);
     const addFiles = useCallback(async (paths: string[]) => {
         const validPaths = paths.filter((path) => SUPPORTED_EXTENSIONS.includes(getExtension(path)));
         if (validPaths.length === 0) {
             if (paths.length > 0) {
-                toast.error("Unsupported files", {
-                    description: "Only LRC and audio files (FLAC, MP3, M4A) are supported.",
+                toast.error(t("translation.lyricsManager.unsupportedFiles"), {
+                    description: t("translation.lyricsManager.onlyLrcAudioFilesFlac"),
                 });
             }
             return;
@@ -83,7 +110,7 @@ export function LyricsManagerPage() {
                     future: [],
                     source: "",
                     synced: false,
-                    status: "loading" as const,
+                    status: "pending" as const,
                 };
             });
             if (entries.length === 0) {
@@ -91,33 +118,46 @@ export function LyricsManagerPage() {
             }
             return [...prev, ...entries];
         });
-        for (const path of newPaths) {
-            try {
-                const result = await ReadEmbeddedLyrics(path);
-                setFiles((prev) => prev.map((f) => {
-                    if (f.path !== path)
-                        return f;
-                    if (result.error) {
-                        return { ...f, status: "empty" as const, error: result.error };
-                    }
-                    return {
-                        ...f,
-                        lyrics: result.lyrics,
-                        draft: result.lyrics,
-                        source: result.source,
-                        synced: result.synced,
-                        status: "loaded" as const,
-                    };
-                }));
-            }
-            catch (err) {
-                setFiles((prev) => prev.map((f) => f.path === path
-                    ? { ...f, status: "error" as const, error: err instanceof Error ? err.message : "Failed to read lyrics" }
-                    : f));
-            }
-        }
         setSelectedPath((prev) => prev ?? newPaths[0] ?? null);
     }, []);
+    const loadLyricsFile = useCallback(async (path: string) => {
+        setFiles((prev) => prev.map((file) => file.path === path ? { ...file, status: "loading" as const, error: undefined } : file));
+        try {
+            const result = await ReadEmbeddedLyrics(path);
+            setFiles((prev) => prev.map((file) => {
+                if (file.path !== path)
+                    return file;
+                if (result.error)
+                    return { ...file, status: "empty" as const, error: translateMessage(result.error) };
+                return { ...file, lyrics: result.lyrics, draft: result.lyrics, source: result.source, synced: result.synced, status: "loaded" as const };
+            }));
+        }
+        catch (error) {
+            setFiles((prev) => prev.map((file) => file.path === path
+                ? { ...file, status: "error" as const, error: error instanceof Error ? translateMessage(error.message) : t("translation.fileManager.failedReadLyricsFile") }
+                : file));
+        }
+    }, []);
+    const handleScan = async () => {
+        if (files.length === 0 || scanning)
+            return;
+        const targets = files.filter((file) => ![".lrc", ".txt"].includes(getExtension(file.path))).map((file) => file.path);
+        if (targets.length === 0)
+            return;
+        setScanning(true);
+        setScanProgress({ current: 0, total: targets.length });
+        for (let index = 0; index < targets.length; index++) {
+            await loadLyricsFile(targets[index]);
+            setScanProgress({ current: index + 1, total: targets.length });
+        }
+        setScanning(false);
+        toast.success(t("translation.enrich.scanCompleted", { value1: targets.length }));
+    };
+    const handleSelectFile = (file: LyricsFile) => {
+        setSelectedPath(file.path);
+        if (file.status === "pending" && [".lrc", ".txt"].includes(getExtension(file.path)))
+            void loadLyricsFile(file.path);
+    };
     const handleSelectFiles = async () => {
         try {
             const selected = await SelectLyricsFiles();
@@ -126,8 +166,8 @@ export function LyricsManagerPage() {
             }
         }
         catch (err) {
-            toast.error("File Selection Failed", {
-                description: err instanceof Error ? err.message : "Failed to select files",
+            toast.error(t("translation.common.fileSelectionFailed"), {
+                description: err instanceof Error ? translateMessage(err.message) : t("translation.audioConverter.failedSelectFiles"),
             });
         }
     };
@@ -138,16 +178,16 @@ export function LyricsManagerPage() {
                 return;
             const found = await ScanLyricsFolder(folder);
             if (!found || found.length === 0) {
-                toast.info("No files found", {
-                    description: "No lyrics or audio files were found in that folder.",
+                toast.info(t("translation.lyricsManager.noFilesFound"), {
+                    description: t("translation.lyricsManager.noLyricsAudioFilesWere"),
                 });
                 return;
             }
             addFiles(found);
         }
         catch (err) {
-            toast.error("Folder Scan Failed", {
-                description: err instanceof Error ? err.message : "Failed to scan folder",
+            toast.error(t("translation.lyricsManager.folderScanFailed"), {
+                description: err instanceof Error ? translateMessage(err.message) : t("translation.lyricsManager.failedScanFolder"),
             });
         }
     };
@@ -233,15 +273,15 @@ export function LyricsManagerPage() {
                 setFiles((prev) => prev.map((f) => f.path === selectedFile.path
                     ? { ...f, lyrics: f.draft, synced: isSynced(f.draft) }
                     : f));
-                toast.success("Lyrics saved", { description: selectedFile.name });
+                toast.success(t("translation.lyricsManager.lyricsSaved"), { description: selectedFile.name });
             }
             else {
-                toast.error("Save failed", { description: result.error || "Unknown error" });
+                toast.error(t("translation.lyricsManager.saveFailed"), { description: result.error ? translateMessage(result.error) : t("translation.audioConverter.unknownError") });
             }
         }
         catch (err) {
-            toast.error("Save failed", {
-                description: err instanceof Error ? err.message : "Unknown error",
+            toast.error(t("translation.lyricsManager.saveFailed"), {
+                description: err instanceof Error ? translateMessage(err.message) : t("translation.audioConverter.unknownError"),
             });
         }
         finally {
@@ -256,7 +296,7 @@ export function LyricsManagerPage() {
         if (result.already_exists) {
             return { ok: false as const, alreadyExists: true, output: result.output_path };
         }
-        return { ok: false as const, error: result.error || "Failed to extract lyrics" };
+        return { ok: false as const, error: result.error ? translateMessage(result.error) : t("translation.lyricsManager.extractFailed") };
     };
     const handleExtractSelected = async () => {
         if (!selectedFile || selectedFile.status !== "loaded")
@@ -265,20 +305,20 @@ export function LyricsManagerPage() {
         try {
             const result = await extractFile(selectedFile, false);
             if (result.ok) {
-                toast.success("Lyrics extracted", { description: result.output });
+                toast.success(t("translation.lyricsManager.lyricsExtracted"), { description: result.output });
             }
             else if (result.alreadyExists) {
-                toast.info("LRC already exists", {
-                    description: "A .lrc file with the same name already exists next to this file.",
+                toast.info(t("translation.lyricsManager.lrcAlreadyExists"), {
+                    description: t("translation.lyricsManager.lrcFileSameNameAlready"),
                 });
             }
             else {
-                toast.error("Extract failed", { description: result.error });
+                toast.error(t("translation.lyricsManager.extractFailed"), { description: result.error });
             }
         }
         catch (err) {
-            toast.error("Extract failed", {
-                description: err instanceof Error ? err.message : "Unknown error",
+            toast.error(t("translation.lyricsManager.extractFailed"), {
+                description: err instanceof Error ? translateMessage(err.message) : t("translation.audioConverter.unknownError"),
             });
         }
         finally {
@@ -288,8 +328,8 @@ export function LyricsManagerPage() {
     const handleExtractAll = async () => {
         const extractable = files.filter((f) => f.status === "loaded");
         if (extractable.length === 0) {
-            toast.error("Nothing to extract", {
-                description: "No files with embedded lyrics are loaded.",
+            toast.error(t("translation.lyricsManager.nothingExtract"), {
+                description: t("translation.lyricsManager.noFilesEmbeddedLyricsLoaded"),
             });
             return;
         }
@@ -313,49 +353,60 @@ export function LyricsManagerPage() {
         }
         setExtracting(false);
         if (success > 0) {
-            toast.success("Lyrics extracted", {
-                description: `${success} file(s) extracted${skipped > 0 ? `, ${skipped} skipped` : ""}${failed > 0 ? `, ${failed} failed` : ""}`,
+            toast.success(t("translation.lyricsManager.lyricsExtracted"), {
+                description: t("translation.lyrics.extracted", { count: success, skipped: skipped > 0 ? t("translation.lyrics.skipped", { count: skipped }) : "", failed: failed > 0 ? t("translation.lyrics.failed", { count: failed }) : "" }),
             });
         }
         else if (skipped > 0 && failed === 0) {
-            toast.info("Already extracted", {
-                description: `${skipped} .lrc file(s) already exist.`,
+            toast.info(t("translation.lyricsManager.alreadyExtracted"), {
+                description: t("translation.lyrics.exists", { count: skipped }),
             });
         }
         else {
-            toast.error("Extract failed", {
-                description: `${failed} file(s) failed to extract.`,
+            toast.error(t("translation.lyricsManager.extractFailed"), {
+                description: t("translation.lyrics.extractFailed", { count: failed }),
             });
         }
     };
     const embeddedLoadedCount = files.filter((f) => f.status === "loaded" && f.source === "embedded").length;
+    const scannableCount = files.filter((file) => ![".lrc", ".txt"].includes(getExtension(file.path))).length;
     const draftSynced = selectedFile ? isSynced(selectedFile.draft) : false;
-    return (<div className={`space-y-6 ${isFullscreen ? "h-full flex flex-col" : ""}`}>
-        <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold">Lyrics Manager</h1>
+    return (<div className="flex h-[calc(100dvh-5.5rem)] min-h-0 flex-col gap-6 md:h-[calc(100dvh-6.5rem)]">
+        <div className="shrink-0 space-y-2">
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-bold">{t("translation.common.lyricsManager")}</h1>
             {files.length > 0 && (<div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={handleSelectFiles}>
+                <Button onClick={handleScan} disabled={scanning || extracting || saving || scannableCount === 0}>
+                    <ScanText className={`h-4 w-4 ${scanning ? "animate-pulse" : ""}`}/>
+                    {scanning ? t("translation.enrich.scanning") : t("translation.enrich.scan")}
+                </Button>
+                <Button variant="outline" onClick={handleSelectFiles} disabled={scanning}>
                     <Upload className="h-4 w-4"/>
-                    Add Files
+                    {t("translation.common.addFiles")}
                 </Button>
-                <Button variant="outline" size="sm" onClick={handleSelectFolder}>
+                <Button variant="outline" onClick={handleSelectFolder} disabled={scanning}>
                     <FolderOpen className="h-4 w-4"/>
-                    Add Folder
+                    {t("translation.common.addFolder")}
                 </Button>
-                {embeddedLoadedCount > 0 && (<Button variant="outline" size="sm" onClick={handleExtractAll} disabled={extracting}>
+                {embeddedLoadedCount > 0 && (<Button variant="outline" onClick={handleExtractAll} disabled={extracting || scanning}>
                     {extracting ? <Spinner className="h-4 w-4"/> : <Download className="h-4 w-4"/>}
-                    Extract All
+                    {t("translation.lyricsManager.extractAll")}
                 </Button>)}
-                <Button variant="outline" size="sm" onClick={clearFiles} disabled={extracting}>
+                <Button variant="destructive" onClick={clearFiles} disabled={extracting || scanning}>
                     <Trash2 className="h-4 w-4"/>
-                    Clear All
+                    {t("translation.common.clearAll")}
                 </Button>
             </div>)}
+          </div>
+          {scanning && (<div className="space-y-1.5">
+            <div className="flex items-center justify-between text-xs text-muted-foreground"><span>{t("translation.enrich.scanning")}</span><span className="font-mono tabular-nums">{scanProgress.current} / {scanProgress.total}</span></div>
+            <Progress value={scanProgress.total > 0 ? (scanProgress.current / scanProgress.total) * 100 : 0} aria-label={t("translation.enrich.scanning")}/>
+          </div>)}
         </div>
 
-        <div className={`flex flex-col items-center justify-center border-2 border-dashed rounded-lg transition-all ${isFullscreen ? "flex-1 min-h-100" : "min-h-100"} ${isDragging
-            ? "border-primary bg-primary/10"
-            : "border-muted-foreground/30"}`} onDragOver={(e) => {
+        <div className={`flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden transition-all ${files.length === 0
+            ? `rounded-lg border-2 border-dashed ${isDragging ? "border-primary bg-primary/10" : "border-muted-foreground/30"}`
+            : "rounded-lg border"}`} onDragOver={(e) => {
             e.preventDefault();
             setIsDragging(true);
         }} onDragLeave={(e) => {
@@ -371,21 +422,21 @@ export function LyricsManagerPage() {
                 </div>
                 <p className="text-sm text-muted-foreground mb-4 text-center">
                     {isDragging
-                ? "Drop your files here"
-                : "Drag and drop LRC or audio files here, or use the buttons below"}
+                ? t("translation.migrated.LyricsManagerPage.dropYourFilesHere")
+                : t("translation.migrated.LyricsManagerPage.dragAndDropLRCOrAudioFiles")}
                 </p>
                 <div className="flex gap-2">
-                    <Button onClick={handleSelectFiles} size="lg">
-                        <Upload className="h-5 w-5"/>
-                        Select Files
+                    <Button onClick={handleSelectFiles}>
+                        <Upload className="h-4 w-4"/>
+                        {t("translation.common.selectFiles")}
                     </Button>
-                    <Button onClick={handleSelectFolder} size="lg" variant="outline">
-                        <FolderOpen className="h-5 w-5"/>
-                        Select Folder
+                    <Button onClick={handleSelectFolder} variant="outline">
+                        <FolderOpen className="h-4 w-4"/>
+                        {t("translation.common.selectFolder")}
                     </Button>
                 </div>
                 <p className="text-xs text-muted-foreground mt-4 text-center">
-                    Reads embedded lyrics from FLAC, MP3, M4A, Opus or plain LRC files. Folders are scanned recursively.
+                    {t("translation.lyricsManager.readsEmbeddedLyricsFlacMp3")}
                 </p>
             </>) : (<div className="w-full h-full p-4 flex flex-col md:flex-row gap-4 min-h-0">
 
@@ -393,10 +444,15 @@ export function LyricsManagerPage() {
                     {files.map((file) => {
                 const isActive = file.path === selectedPath;
                 const fileDirty = file.draft !== file.lyrics;
-                return (<button key={file.path} onClick={() => setSelectedPath(file.path)} className={`group flex items-center gap-2 rounded-lg border p-2 text-left transition-colors ${isActive ? "border-primary bg-primary/10" : "hover:bg-muted/60"}`}>
+                return (<button key={file.path} onClick={() => handleSelectFile(file)} className={`group flex items-center gap-2 rounded-lg border p-2 text-left transition-colors ${isActive ? "border-primary bg-primary/10" : "hover:bg-muted/60"}`}>
                             {file.status === "loading" ? (<Spinner className="h-4 w-4 shrink-0 text-primary"/>)
-                        : file.status === "error" || file.status === "empty" ? (<AlertCircle className="h-4 w-4 shrink-0 text-destructive"/>)
-                            : (<FileText className="h-4 w-4 shrink-0 text-muted-foreground"/>)}
+                        : file.status === "pending" ? ([".lrc", ".txt"].includes(getExtension(file.path))
+                            ? <FileText className="h-4 w-4 shrink-0 text-blue-500"/>
+                            : <FileMusic className="h-4 w-4 shrink-0 text-primary"/>)
+                            : file.status === "error" || file.status === "empty" ? (<AlertCircle className="h-4 w-4 shrink-0 text-destructive"/>)
+                                : ([".lrc", ".txt"].includes(getExtension(file.path))
+                                    ? <FileText className="h-4 w-4 shrink-0 text-blue-500"/>
+                                    : <FileMusic className="h-4 w-4 shrink-0 text-primary"/>)}
                             <div className="flex-1 min-w-0">
                                 <p className="truncate text-xs font-medium">{file.name}{fileDirty ? " *" : ""}</p>
                                 <p className="truncate text-[10px] uppercase text-muted-foreground">{file.format}</p>
@@ -410,52 +466,55 @@ export function LyricsManagerPage() {
 
                 <div className="flex-1 min-w-0 flex flex-col min-h-0">
                     {!selectedFile ? (<div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
-                        Select a file to view its lyrics
+                        {t("translation.lyricsManager.selectFileViewItsLyrics")}
                     </div>) : selectedFile.status === "loading" ? (<div className="flex-1 flex items-center justify-center gap-2 text-sm text-muted-foreground">
                         <Spinner className="h-4 w-4"/>
-                        Reading lyrics...
+                        {t("translation.lyricsManager.readingLyrics")}
+                    </div>) : selectedFile.status === "pending" ? (<div className="flex-1 flex flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
+                        <MicVocal className="h-8 w-8 text-primary"/>
+                        <span>{t("translation.lyricsManager.scanAudioFirst")}</span>
                     </div>) : selectedFile.status === "error" || selectedFile.status === "empty" ? (<div className="flex-1 flex flex-col items-center justify-center gap-2 text-center px-6">
                         <AlertCircle className="h-8 w-8 text-destructive"/>
                         <p className="text-sm font-medium">{selectedFile.name}</p>
-                        <p className="text-xs text-muted-foreground">{selectedFile.error || "No lyrics found"}</p>
+                        <p className="text-xs text-muted-foreground">{selectedFile.error || t("translation.fileManager.noLyricsContent")}</p>
                     </div>) : (<>
                         <div className="flex flex-col gap-2 pb-3 border-b shrink-0">
                             <div className="flex items-center gap-2 min-w-0">
                                 <p className="truncate text-sm font-medium flex-1">{selectedFile.name}{isDirty ? " *" : ""}</p>
                                 <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase shrink-0">
-                                    {selectedFile.source === "lrc" ? (<><FileText className="h-3 w-3"/> LRC</>) : (<><Music className="h-3 w-3"/> Embedded</>)}
+                                    {selectedFile.source === "lrc" ? (<><FileText className="h-3 w-3"/> {t("literal.lyricsManager.lrc")}</>) : (<><Music className="h-3 w-3"/> {t("translation.migrated.LyricsManagerPage.embedded")}</>)}
                                 </span>
                                 <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase shrink-0">
                                     <Clock className="h-3 w-3"/>
-                                    {draftSynced ? "Synced" : "Plain"}
+                                    {draftSynced ? t("translation.migrated.LyricsManagerPage.synced") : t("translation.migrated.LyricsManagerPage.plain")}
                                 </span>
                             </div>
                             <div className="flex items-center gap-2 flex-wrap">
-                                {selectedFile.source === "embedded" && (<Button variant="outline" size="sm" onClick={handleExtractSelected} disabled={extracting}>
+                                {selectedFile.source === "embedded" && (<Button variant="outline" onClick={handleExtractSelected} disabled={extracting}>
                                     {extracting ? <Spinner className="h-4 w-4"/> : <Download className="h-4 w-4"/>}
-                                    Extract LRC
+                                    {t("translation.lyricsManager.extractLrc")}
                                 </Button>)}
-                                <Button variant={editMode ? "default" : "outline"} size="sm" onClick={() => setEditMode((v) => !v)} disabled={!canEdit}>
+                                <Button variant={editMode ? "default" : "outline"} onClick={() => setEditMode((v) => !v)} disabled={!canEdit}>
                                     <Pencil className="h-4 w-4"/>
-                                    {editMode ? "Editing" : "Edit"}
+                                    {editMode ? t("translation.migrated.LyricsManagerPage.editing") : t("translation.migrated.LyricsManagerPage.edit")}
                                 </Button>
                             </div>
                             {editMode && (<div className="flex items-center gap-2 flex-wrap">
-                                <Button variant="outline" size="sm" onClick={handleConvertToPlain} disabled={!draftSynced}>
+                                <Button variant="outline" onClick={handleConvertToPlain} disabled={!draftSynced}>
                                     <Type className="h-4 w-4"/>
-                                    Convert to Plain
+                                    {t("translation.lyricsManager.convertPlain")}
                                 </Button>
-                                <Button variant="outline" size="sm" onClick={handleUndo} disabled={selectedFile.past.length === 0}>
+                                <Button variant="outline" onClick={handleUndo} disabled={selectedFile.past.length === 0}>
                                     <Undo2 className="h-4 w-4"/>
-                                    Undo
+                                    {t("translation.lyricsManager.undo")}
                                 </Button>
-                                <Button variant="outline" size="sm" onClick={handleRedo} disabled={selectedFile.future.length === 0}>
+                                <Button variant="outline" onClick={handleRedo} disabled={selectedFile.future.length === 0}>
                                     <Redo2 className="h-4 w-4"/>
-                                    Redo
+                                    {t("translation.lyricsManager.redo")}
                                 </Button>
-                                <Button variant="outline" size="sm" onClick={handleSave} disabled={!isDirty || saving}>
+                                <Button variant="outline" onClick={handleSave} disabled={!isDirty || saving}>
                                     {saving ? <Spinner className="h-4 w-4"/> : <Save className="h-4 w-4"/>}
-                                    Save
+                                    {t("translation.lyricsManager.save")}
                                 </Button>
                             </div>)}
                         </div>

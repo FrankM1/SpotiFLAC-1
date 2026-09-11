@@ -1,8 +1,9 @@
 import { useState, useCallback, useEffect } from "react";
+import { t, translateMessage } from "@/i18n";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { ToggleGroup, ToggleGroupItem, } from "@/components/ui/toggle-group";
-import { Upload, X, CheckCircle2, AlertCircle, Trash2, FileMusic, WandSparkles, } from "lucide-react";
+import { Upload, X, CircleCheckBig, AlertCircle, Trash2, FileMusic, WandSparkles, } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { ConvertAudio, SelectAudioFiles, SelectFolder, ListAudioFilesInDir, } from "../../wailsjs/go/main/App";
 import { toastWithSound as toast } from "@/lib/toast-with-sound";
@@ -25,14 +26,14 @@ function formatFileSize(bytes: number): string {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
 }
 const BITRATE_OPTIONS = [
-    { value: "320k", label: "320k" },
-    { value: "256k", label: "256k" },
-    { value: "192k", label: "192k" },
-    { value: "128k", label: "128k" },
+    { value: "320k", label: t("literal.audioConverter.320k") },
+    { value: "256k", label: t("literal.audioConverter.256k") },
+    { value: "192k", label: t("literal.audioConverter.192k") },
+    { value: "128k", label: t("literal.audioConverter.128k") },
 ];
 const M4A_CODEC_OPTIONS = [
-    { value: "aac", label: "AAC" },
-    { value: "alac", label: "ALAC" },
+    { value: "aac", label: t("literal.audioConverter.aac") },
+    { value: "alac", label: t("literal.audioConverter.alac") },
 ];
 const STORAGE_KEY = "spotiflac_audio_converter_state";
 export function AudioConverterPage() {
@@ -95,7 +96,6 @@ export function AudioConverterPage() {
     });
     const [converting, setConverting] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
-    const [isFullscreen, setIsFullscreen] = useState(false);
     const saveState = useCallback((stateToSave: {
         files: AudioFile[];
         outputFormat: "mp3" | "m4a" | "wav" | "aiff" | "opus";
@@ -126,19 +126,6 @@ export function AudioConverterPage() {
     }, [files, outputFormat, m4aCodec]);
     const isFormatDisabled = files.length > 0 && files.every((f) => f.format === "mp3");
     const hasFlacFiles = files.some((f) => f.format === "flac");
-    useEffect(() => {
-        const checkFullscreen = () => {
-            const isMaximized = window.innerHeight >= window.screen.height * 0.9;
-            setIsFullscreen(isMaximized);
-        };
-        checkFullscreen();
-        window.addEventListener("resize", checkFullscreen);
-        window.addEventListener("focus", checkFullscreen);
-        return () => {
-            window.removeEventListener("resize", checkFullscreen);
-            window.removeEventListener("focus", checkFullscreen);
-        };
-    }, []);
     const handleSelectFiles = async () => {
         try {
             const selectedFiles = await SelectAudioFiles();
@@ -147,8 +134,8 @@ export function AudioConverterPage() {
             }
         }
         catch (err) {
-            toast.error("File Selection Failed", {
-                description: err instanceof Error ? err.message : "Failed to select files",
+            toast.error(t("translation.common.fileSelectionFailed"), {
+                description: err instanceof Error ? translateMessage(err.message) : t("translation.audioConverter.failedSelectFiles"),
             });
         }
     };
@@ -161,15 +148,15 @@ export function AudioConverterPage() {
                     addFiles(folderFiles.map((f) => f.path));
                 }
                 else {
-                    toast.info("No audio files found", {
-                        description: "No FLAC or MP3 files found in the selected folder.",
+                    toast.info(t("translation.common.noAudioFilesFound"), {
+                        description: t("translation.audioConverter.noFlacMp3FilesFound"),
                     });
                 }
             }
         }
         catch (err) {
-            toast.error("Folder Selection Failed", {
-                description: err instanceof Error ? err.message : "Failed to select folder",
+            toast.error(t("translation.common.folderSelectionFailed"), {
+                description: err instanceof Error ? translateMessage(err.message) : t("translation.fileManager.failedSelectFolder"),
             });
         }
     };
@@ -180,8 +167,8 @@ export function AudioConverterPage() {
             return ext === ".m4a";
         });
         if (m4aFiles.length > 0) {
-            toast.error("M4A files not supported", {
-                description: "Only FLAC and MP3 files are supported as input. Please convert M4A files first.",
+            toast.error(t("translation.audioConverter.m4aFilesNotSupported"), {
+                description: t("translation.audioConverter.onlyFlacMp3FilesSupported"),
             });
         }
         const GetFileSizes = (files: string[]): Promise<Record<string, number>> => (window as any)["go"]["main"]["App"]["GetFileSizes"](files);
@@ -207,15 +194,15 @@ export function AudioConverterPage() {
             if (newFiles.length > 0) {
                 if (paths.length > newFiles.length) {
                     const skipped = paths.length - newFiles.length;
-                    toast.info("Some files skipped", {
-                        description: `${skipped} file(s) were skipped (unsupported format or already added)`,
+                    toast.info(t("translation.common.someFilesSkipped"), {
+                        description: t("translation.converter.skipped", { count: skipped }),
                     });
                 }
                 return [...prev, ...newFiles];
             }
             if (paths.length > 0 && m4aFiles.length === 0) {
-                toast.info("No new files added", {
-                    description: "All files were already added or have unsupported format",
+                toast.info(t("translation.common.noNewFilesAdded"), {
+                    description: t("translation.audioConverter.allFilesWereAlreadyAdded"),
                 });
             }
             return prev;
@@ -243,8 +230,8 @@ export function AudioConverterPage() {
     };
     const handleConvert = async () => {
         if (files.length === 0) {
-            toast.error("No files selected", {
-                description: "Please add audio files to convert",
+            toast.error(t("translation.common.noFilesSelected"), {
+                description: t("translation.audioConverter.pleaseAddAudioFilesConvert"),
             });
             return;
         }
@@ -269,7 +256,7 @@ export function AudioConverterPage() {
                     return {
                         ...f,
                         status: result.success ? "success" : "error",
-                        error: result.error,
+                        error: result.error ? translateMessage(result.error) : undefined,
                         outputPath: result.output_file,
                     };
                 }
@@ -278,21 +265,21 @@ export function AudioConverterPage() {
             const successCount = results.filter((r) => r.success).length;
             const failCount = results.filter((r) => !r.success).length;
             if (successCount > 0) {
-                toast.success("Conversion Complete", {
-                    description: `Successfully converted ${successCount} file(s)${failCount > 0 ? `, ${failCount} failed` : ""}`,
+                toast.success(t("translation.audioConverter.conversionComplete"), {
+                    description: t("translation.converter.success", { count: successCount, failures: failCount > 0 ? t("translation.common.failures", { count: failCount }) : "" }),
                 });
             }
             else if (failCount > 0) {
-                toast.error("Conversion Failed", {
-                    description: `All ${failCount} file(s) failed to convert`,
+                toast.error(t("translation.audioConverter.conversionFailed"), {
+                    description: t("translation.converter.allFailed", { count: failCount }),
                 });
             }
         }
         catch (err) {
-            toast.error("Conversion Error", {
-                description: err instanceof Error ? err.message : "Unknown error",
+            toast.error(t("translation.audioConverter.conversionError"), {
+                description: err instanceof Error ? translateMessage(err.message) : t("translation.audioConverter.unknownError"),
             });
-            setFiles((prev) => prev.map((f) => ({ ...f, status: "error" as const, error: "Conversion failed" })));
+            setFiles((prev) => prev.map((f) => ({ ...f, status: "error" as const, error: t("translation.audioConverter.conversionFailed") })));
         }
         finally {
             setConverting(false);
@@ -303,7 +290,7 @@ export function AudioConverterPage() {
             case "converting":
                 return <Spinner className="h-4 w-4 text-primary"/>;
             case "success":
-                return <CheckCircle2 className="h-4 w-4 text-green-500"/>;
+                return <CircleCheckBig className="h-4 w-4 text-green-500"/>;
             case "error":
                 return <AlertCircle className="h-4 w-4 text-destructive"/>;
             default:
@@ -312,30 +299,30 @@ export function AudioConverterPage() {
     };
     const convertableCount = files.filter((f) => f.status === "pending" || f.status === "success").length;
     const successCount = files.filter((f) => f.status === "success").length;
-    return (<div className={`space-y-6 ${isFullscreen ? "h-full flex flex-col" : ""}`}>
+    return (<div className="flex h-[calc(100dvh-5.5rem)] min-h-0 flex-col gap-6 md:h-[calc(100dvh-6.5rem)]">
 
-        <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold">Audio Converter</h1>
+        <div className="flex shrink-0 items-center justify-between">
+            <h1 className="text-2xl font-bold">{t("translation.common.audioConverter")}</h1>
             {files.length > 0 && (<div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={handleSelectFiles}>
+                <Button variant="outline" onClick={handleSelectFiles}>
                     <Upload className="h-4 w-4"/>
-                    Add Files
+                    {t("translation.common.addFiles")}
                 </Button>
-                <Button variant="outline" size="sm" onClick={handleSelectFolder}>
+                <Button variant="outline" onClick={handleSelectFolder}>
                     <Upload className="h-4 w-4"/>
-                    Add Folder
+                    {t("translation.common.addFolder")}
                 </Button>
-                <Button variant="outline" size="sm" onClick={clearFiles} disabled={converting}>
+                <Button variant="destructive" onClick={clearFiles} disabled={converting}>
                     <Trash2 className="h-4 w-4"/>
-                    Clear All
+                    {t("translation.common.clearAll")}
                 </Button>
             </div>)}
         </div>
 
 
-        <div className={`flex flex-col items-center justify-center border-2 border-dashed rounded-lg transition-all ${isFullscreen ? "flex-1 min-h-[400px]" : "h-[400px]"} ${isDragging
-            ? "border-primary bg-primary/10"
-            : "border-muted-foreground/30"}`} onDragOver={(e) => {
+        <div className={`flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden transition-all ${files.length === 0
+            ? `rounded-lg border-2 border-dashed ${isDragging ? "border-primary bg-primary/10" : "border-muted-foreground/30"}`
+            : "rounded-lg border"}`} onDragOver={(e) => {
             e.preventDefault();
             setIsDragging(true);
         }} onDragLeave={(e) => {
@@ -351,21 +338,21 @@ export function AudioConverterPage() {
                 </div>
                 <p className="text-sm text-muted-foreground mb-4 text-center">
                     {isDragging
-                ? "Drop your audio files here"
-                : "Drag and drop audio files here, or click the button below to select"}
+                ? t("translation.migrated.AudioConverterPage.dropYourAudioFilesHere")
+                : t("translation.migrated.AudioConverterPage.dragAndDropAudioFilesHereOr")}
                 </p>
                 <div className="flex gap-3">
-                    <Button onClick={handleSelectFiles} size="lg">
-                        <Upload className="h-5 w-5"/>
-                        Select Files
+                    <Button onClick={handleSelectFiles}>
+                        <Upload className="h-4 w-4"/>
+                        {t("translation.common.selectFiles")}
                     </Button>
-                    <Button onClick={handleSelectFolder} size="lg" variant="outline">
-                        <Upload className="h-5 w-5"/>
-                        Select Folder
+                    <Button onClick={handleSelectFolder} variant="outline">
+                        <Upload className="h-4 w-4"/>
+                        {t("translation.common.selectFolder")}
                     </Button>
                 </div>
                 <p className="text-xs text-muted-foreground mt-4 text-center">
-                    Supported formats: FLAC, MP3
+                    {t("translation.audioConverter.supportedFormatsFlacMp3")}
                 </p>
             </>) : (<div className="w-full h-full p-6 space-y-4 flex flex-col">
 
@@ -373,31 +360,31 @@ export function AudioConverterPage() {
 
                     <div className="flex items-center gap-4">
                         <div className="flex items-center gap-2">
-                            <Label className="whitespace-nowrap">Format:</Label>
+                            <Label className="whitespace-nowrap">{t("translation.audioConverter.format")}</Label>
                             <ToggleGroup type="single" variant="outline" value={outputFormat} onValueChange={(value) => {
                 if (value)
                     setOutputFormat(value as "mp3" | "m4a" | "wav" | "aiff" | "opus");
             }}>
-                                {!isFormatDisabled && (<ToggleGroupItem value="mp3" aria-label="MP3">
-                                    MP3
+                                {!isFormatDisabled && (<ToggleGroupItem value="mp3" aria-label={t("literal.common.mp3")}>
+                                    {t("literal.common.mp3")}
                                 </ToggleGroupItem>)}
-                                <ToggleGroupItem value="m4a" aria-label="M4A">
+                                <ToggleGroupItem value="m4a" aria-label={t("literal.audioConverter.m4a")}>
                                     M4A
                                 </ToggleGroupItem>
-                                <ToggleGroupItem value="opus" aria-label="Opus">
-                                    Opus
+                                <ToggleGroupItem value="opus" aria-label={t("literal.common.opus")}>
+                                    {t("literal.common.opus")}
                                 </ToggleGroupItem>
-                                <ToggleGroupItem value="wav" aria-label="WAV">
-                                    WAV
+                                <ToggleGroupItem value="wav" aria-label={t("literal.common.wav")}>
+                                    {t("literal.common.wav")}
                                 </ToggleGroupItem>
-                                <ToggleGroupItem value="aiff" aria-label="AIFF">
-                                    AIFF
+                                <ToggleGroupItem value="aiff" aria-label={t("literal.common.aiff")}>
+                                    {t("literal.common.aiff")}
                                 </ToggleGroupItem>
                             </ToggleGroup>
                         </div>
 
                         {outputFormat === "m4a" && hasFlacFiles && (<div className="flex items-center gap-2">
-                            <Label className="whitespace-nowrap">Codec:</Label>
+                            <Label className="whitespace-nowrap">{t("translation.audioConverter.codec")}</Label>
                             <ToggleGroup type="single" variant="outline" value={m4aCodec} onValueChange={(value) => {
                     if (value)
                         setM4aCodec(value as "aac" | "alac");
@@ -409,7 +396,7 @@ export function AudioConverterPage() {
                         </div>)}
 
                         {(outputFormat === "mp3" || outputFormat === "opus" || (outputFormat === "m4a" && m4aCodec === "aac")) && (<div className="flex items-center gap-2">
-                            <Label className="whitespace-nowrap">Bitrate:</Label>
+                            <Label className="whitespace-nowrap">{t("translation.common.bitrate")}</Label>
                             <ToggleGroup type="single" variant="outline" value={bitrate} onValueChange={(value) => {
                     if (value)
                         setBitrate(value);
@@ -425,7 +412,7 @@ export function AudioConverterPage() {
 
                 <div className="flex items-center justify-between shrink-0">
                     <div className="text-sm text-muted-foreground">
-                        {files.length} file(s) • {successCount} converted
+                        {files.length} {t("translation.common.file", { count: files.length })} • {successCount} {t("translation.audioConverter.converted")}
                     </div>
                 </div>
 
@@ -445,7 +432,7 @@ export function AudioConverterPage() {
                         <span className="text-xs uppercase text-muted-foreground">
                             {file.format}
                         </span>
-                        {file.status !== "converting" && (<Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeFile(file.path)} disabled={converting}>
+                        {file.status !== "converting" && (<Button variant="ghost" size="icon" onClick={() => removeFile(file.path)} disabled={converting}>
                             <X className="h-4 w-4"/>
                         </Button>)}
                     </div>))}
@@ -453,13 +440,13 @@ export function AudioConverterPage() {
 
 
                 <div className="flex justify-center pt-4 border-t shrink-0">
-                    <Button onClick={handleConvert} disabled={converting || convertableCount === 0} size="lg">
+                    <Button onClick={handleConvert} disabled={converting || convertableCount === 0}>
                         {converting ? (<>
                             <Spinner className="h-4 w-4"/>
-                            Converting...
+                            {t("translation.audioConverter.converting")}
                         </>) : (<>
                             <WandSparkles className="h-4 w-4"/>
-                            Convert {convertableCount > 0 ? `${convertableCount} File(s)` : ""}
+                            {t("translation.audioConverter.convert")} {convertableCount > 0 ? t("translation.migrated.AudioConverterPage.text", { value1: convertableCount, value2: t("translation.common.fileTitle", { count: convertableCount }) }) : ""}
                         </>)}
                     </Button>
                 </div>

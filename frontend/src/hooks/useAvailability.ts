@@ -1,3 +1,4 @@
+import { t, translateMessage } from "@/i18n";
 import { useState, useCallback } from "react";
 import { CheckTrackAvailability } from "../../wailsjs/go/main/App";
 import type { TrackAvailability } from "@/types/api";
@@ -10,7 +11,7 @@ export function useAvailability() {
     const [error, setError] = useState<string | null>(null);
     const checkAvailability = useCallback(async (spotifyId: string) => {
         if (!spotifyId) {
-            setError("No Spotify ID provided");
+            setError(t("translation.download.noSpotifyIdProvided"));
             return null;
         }
         setChecking(true);
@@ -29,7 +30,7 @@ export function useAvailability() {
             return availability;
         }
         catch (err) {
-            const errorMessage = err instanceof Error ? err.message : "Failed to check availability";
+            const errorMessage = err instanceof Error ? translateMessage(err.message) : t("translation.download.failedCheckAvailability");
             logger.error(`Availability check error: ${errorMessage}`);
             setError(errorMessage);
             return null;

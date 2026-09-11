@@ -1,24 +1,44 @@
-# SpotiFLAC
+<div align="left">
+  <a href="https://trendshift.io/repositories/15737" target="_blank"><img
+      src="https://trendshift.io/api/badge/repositories/15737" alt="afkarxyz%2FSpotiFLAC | Trendshift"
+      style="width: 250px; height: 55px;" width="250" height="55" /></a>
 
-<a href="https://trendshift.io/repositories/15737" target="_blank"><img src="https://trendshift.io/api/badge/repositories/15737" alt="afkarxyz%2FSpotiFLAC | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+  <h1>SpotiFLAC</h1>
+  <p>
+    Get Spotify tracks in true FLAC from Tidal, Qobuz &amp; Amazon Music — no account required.
+  </p>
+  <p>
+    <a href="https://github.com/spotbye/SpotiFLAC/stargazers"><img
+        src="https://img.shields.io/github/stars/spotbye/SpotiFLAC?color=ffcb47&labelColor=black&logo=github&label=Stars" /></a><a
+      href="https://github.com/spotbye/SpotiFLAC/releases"><img
+        src="https://img.shields.io/github/downloads/spotbye/SpotiFLAC/total?color=22c55e&labelColor=black&logo=github&label=Downloads" /></a><a
+      href="https://github.com/spotbye/SpotiFLAC/releases/latest"><img
+        src="https://img.shields.io/github/v/release/spotbye/SpotiFLAC?color=8b5cf6&labelColor=black&logo=github&label=Latest%20Release" /></a><a href="https://github.com/spotbye/SpotiFLAC/releases/latest"><img
+        src="https://img.shields.io/badge/Windows-369eff?labelColor=black&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiB2aWV3Qm94PSIwIDAgMjAgMjAiPjxwYXRoIGZpbGw9IiNmZmZmZmYiIGZpbGwtcnVsZT0iZXZlbm9kZCIgZD0iTTIwIDEwLjg3M1YyMEw4LjQ3OSAxOC41MzdsLjAwMS03LjY2NEgyMFptLTEzLjEyIDBsLS4wMDEgNy40NjFMMCAxNy40NjF2LTYuNTg4aDYuODhaTTIwIDkuMjczSDguNDhsLS4wMDEtNy44MUwyMCAwdjkuMjczWk02Ljg3OSAxLjY2NmwuMDAxIDcuNjA3SDBWMi41MzlsNi44NzktLjg3M1oiLz48L3N2Zz4=" /></a><a
+      href="https://github.com/spotbye/SpotiFLAC/releases/latest"><img
+        src="https://img.shields.io/badge/macOS-FFFFFF?labelColor=black&logo=apple&logoColor=white" /></a><a
+      href="https://github.com/spotbye/SpotiFLAC/releases/latest"><img
+        src="https://img.shields.io/badge/Linux-FCC624?labelColor=black&logo=linux&logoColor=white" /></a><a
+      href="https://t.me/spotiflac"><img
+        src="https://img.shields.io/badge/Announcements-369eff?labelColor=black&logo=telegram&logoColor=white" /></a>
+    <br />
+    <br />
+    <a href="https://github.com/spotbye/SpotiFLAC/releases/latest" target="_blank"><img
+        src="https://github.com/user-attachments/assets/ec33b07f-27a2-40bb-8215-8ad497abd82b" alt="Dark"
+        width="49%" /></a>
+    <a href="https://github.com/spotbye/SpotiFLAC/releases/latest" target="_blank"><img
+        src="https://github.com/user-attachments/assets/91a70402-930d-4f38-9d8a-99413a6c9694" alt="Light"
+        width="49%" /></a>
+  </p>
+</div>
 
-Get Spotify tracks in true FLAC from Tidal, Qobuz & Amazon Music — no account required.
-
-![Windows](https://img.shields.io/badge/Windows-10%2B-0078D6?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiB2aWV3Qm94PSIwIDAgMjAgMjAiPjxwYXRoIGZpbGw9IiNmZmZmZmYiIGZpbGwtcnVsZT0iZXZlbm9kZCIgZD0iTTIwIDEwLjg3M1YyMEw4LjQ3OSAxOC41MzdsLjAwMS03LjY2NEgyMFptLTEzLjEyIDBsLS4wMDEgNy40NjFMMCAxNy40NjF2LTYuNTg4aDYuODhaTTIwIDkuMjczSDguNDhsLS4wMDEtNy44MUwyMCAwdjkuMjczWk02Ljg3OSAxLjY2NmwuMDAxIDcuNjA3SDBWMi41MzlsNi44NzktLjg3M1oiLz48L3N2Zz4=)
-![macOS](https://img.shields.io/badge/macOS-10.13%2B-000000?style=for-the-badge&logo=apple&logoColor=white)
-![Linux](https://img.shields.io/badge/Linux-Any-FCC624?style=for-the-badge&logo=linux&logoColor=white)
-[![Announcements](https://img.shields.io/badge/ANNOUNCEMENTS-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/spotiflac)
-[![Chat](https://img.shields.io/badge/CHAT-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/spotiflac_chat)
-
-### [Download](https://github.com/spotbye/SpotiFLAC/releases)
-
-![Image](https://github.com/user-attachments/assets/c2624ca5-8569-49f0-950e-4410b523cea1)
+### [Download](https://github.com/spotbye/SpotiFLAC/releases/latest)
 
 ## Other projects
 
 ### [SpotiFLAC Next](https://github.com/spotbye/SpotiFLAC-Next)
 
-Get Spotify tracks in true Lossless from Tidal, Qobuz, Amazon Music, Deezer & Apple Music — no account required.
+Get Spotify tracks in true Lossless from Tidal, Qobuz, Amazon Music & Deezer — no account required.
 
 ### [SpotubeDL.com](https://spotubedl.com)
 
@@ -34,9 +54,9 @@ Download Spotify Tracks, Albums, Playlists & Discography as MP3/OGG/Opus.
 
 SpotiFLAC for Android & iOS — maintained by [@zarzet](https://github.com/zarzet)
 
-### [SpotiFLAC (Python Module)](https://github.com/ShuShuzinhuu/SpotiFLAC-Module-Version)
+### [SpotiFLAC (Python Module)](https://github.com/BartolomeoRusso9/SpotiFLAC-Module-Version)
 
-SpotiFLAC Python library for SpotiFLAC integration — maintained by [@ShuShuzinhuu](https://github.com/ShuShuzinhuu)
+SpotiFLAC Python library for SpotiFLAC integration — maintained by [@BartolomeoRusso9](https://github.com/BartolomeoRusso9)
 
 ## FAQ
 
@@ -92,8 +112,6 @@ Your support helps keep development going._
 
 </details>
 
-[![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/afkarxyz)
-
 ## Disclaimer
 
 This project is for **educational and private use only**. The developer does not condone or encourage copyright infringement.
@@ -115,5 +133,3 @@ The software is provided "as is", without warranty of any kind. The author assum
 > [!TIP]
 >
 > **Star Us**, You will receive all release notifications from GitHub without any delay ~
-
-[![RepoStars](https://repostars.dev/api/embed?repo=afkarxyz%2FSpotiFLAC&theme=forest)](https://repostars.dev/?repos=afkarxyz%2FSpotiFLAC&theme=forest)

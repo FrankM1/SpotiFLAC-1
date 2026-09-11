@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
+import { t, translateMessage } from "@/i18n";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { InputWithContext } from "@/components/ui/input-with-context";
 import { Checkbox } from "@/components/ui/checkbox";
-import { FolderOpen, RefreshCw, FileMusic, ChevronRight, ChevronDown, Pencil, Eye, Folder, Info, FileText, Image, Copy, Check, CheckSquare, Square, } from "lucide-react";
+import { FolderOpen, RefreshCw, FileMusic, ChevronRight, ChevronDown, Pencil, Eye, Folder, Info, FileText, Image, Copy, CircleCheck, CheckSquare, Square, } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
@@ -27,7 +28,7 @@ const FORMAT_PRESETS: Record<string, {
     label: string;
     template: string;
 }> = {
-    "title": { label: "Title", template: "{title}" },
+    "title": { label: t("translation.common.title"), template: "{title}" },
     "title-artist": { label: "Title - Artist", template: "{title} - {artist}" },
     "artist-title": { label: "Artist - Title", template: "{artist} - {title}" },
     "track-title": { label: "Track. Title", template: "{track}. {title}" },
@@ -44,16 +45,16 @@ const FORMAT_PRESETS: Record<string, {
 const STORAGE_KEY = "spotiflac_file_manager_state";
 const DEFAULT_CUSTOM_FORMAT = "{title} - {artist}";
 const RENAME_TEMPLATE_VARIABLES: TemplateToken[] = [
-    { key: "{title}", description: "Track title", example: "Golden" },
-    { key: "{artist}", description: "Track artist", example: "HUNTR/X" },
-    { key: "{album}", description: "Album name", example: "KPop Demon Hunters (Soundtrack from the Netflix Film)" },
-    { key: "{album_artist}", description: "Album artist", example: "KPop Demon Hunters Cast / HUNTR/X / Saja Boys" },
-    { key: "{track}", description: "Track number", example: "04" },
-    { key: "{disc}", description: "Disc number", example: "1" },
-    { key: "{year}", description: "Release year", example: "2025" },
-    { key: "{date}", description: "Release date", example: "2025-06-20" },
-    { key: "{isrc}", description: "Track ISRC", example: "QZ8BZ2513510" },
-    { key: "{upc}", description: "Album UPC / barcode", example: "00602478398346" },
+    { key: "{title}", description: t("translation.common.trackTitle"), example: "Golden" },
+    { key: "{artist}", description: t("translation.fileManager.trackArtist"), example: "HUNTR/X" },
+    { key: "{album}", description: t("translation.common.albumName"), example: "KPop Demon Hunters (Soundtrack from the Netflix Film)" },
+    { key: "{album_artist}", description: t("translation.common.albumArtist2"), example: "KPop Demon Hunters Cast / HUNTR/X / Saja Boys" },
+    { key: "{track}", description: t("translation.common.trackNumber"), example: "04" },
+    { key: "{disc}", description: t("translation.common.discNumber"), example: "1" },
+    { key: "{year}", description: t("translation.common.releaseYear"), example: "2025" },
+    { key: "{date}", description: t("translation.fileManager.releaseDate"), example: "2025-06-20" },
+    { key: "{isrc}", description: t("translation.common.trackIsrc"), example: "QZ8BZ2513510" },
+    { key: "{upc}", description: t("translation.common.albumUpcBarcode"), example: "00602478398346" },
 ];
 function formatFileSize(bytes: number): string {
     if (bytes === 0)
@@ -96,7 +97,6 @@ export function FileManagerPage() {
     const [previewData, setPreviewData] = useState<backend.RenamePreview[]>([]);
     const [renaming, setRenaming] = useState(false);
     const [previewOnly, setPreviewOnly] = useState(false);
-    const [isFullscreen, setIsFullscreen] = useState(false);
     const [showMetadata, setShowMetadata] = useState(false);
     const [metadataFile, setMetadataFile] = useState<string>("");
     const [metadataInfo, setMetadataInfo] = useState<AudioMetadata | null>(null);
@@ -120,19 +120,6 @@ export function FileManagerPage() {
         catch {
         }
     }, [renameFormat]);
-    useEffect(() => {
-        const checkFullscreen = () => {
-            const isMaximized = window.innerHeight >= window.screen.height * 0.9;
-            setIsFullscreen(isMaximized);
-        };
-        checkFullscreen();
-        window.addEventListener("resize", checkFullscreen);
-        window.addEventListener("focus", checkFullscreen);
-        return () => {
-            window.removeEventListener("resize", checkFullscreen);
-            window.removeEventListener("focus", checkFullscreen);
-        };
-    }, []);
     const filterFilesByType = (nodes: FileNode[], type: TabType): FileNode[] => {
         return nodes
             .map((node) => {
@@ -171,7 +158,7 @@ export function FileManagerPage() {
         catch (err) {
             const errorMsg = err instanceof Error ? err.message : String(err || "");
             if (!errorMsg.toLowerCase().includes("empty") && !errorMsg.toLowerCase().includes("no file")) {
-                toast.error("Failed to load files", { description: errorMsg || "Unknown error" });
+                toast.error(t("translation.fileManager.failedLoadFiles"), { description: errorMsg ? translateMessage(errorMsg) : t("translation.audioConverter.unknownError") });
             }
             setAllFiles([]);
             setSelectedFiles(new Set());
@@ -205,7 +192,7 @@ export function FileManagerPage() {
                 setRootPath(path);
         }
         catch (err) {
-            toast.error("Failed to select folder", { description: err instanceof Error ? err.message : "Unknown error" });
+            toast.error(t("translation.fileManager.failedSelectFolder"), { description: err instanceof Error ? translateMessage(err.message) : t("translation.audioConverter.unknownError") });
         }
     };
     const toggleExpand = (path: string) => {
@@ -257,7 +244,7 @@ export function FileManagerPage() {
     const deselectAll = () => setSelectedFiles(new Set());
     const handlePreview = async (isPreviewOnly: boolean) => {
         if (selectedFiles.size === 0) {
-            toast.error("No files selected");
+            toast.error(t("translation.common.noFilesSelected"));
             return;
         }
         try {
@@ -267,7 +254,7 @@ export function FileManagerPage() {
             setShowPreview(true);
         }
         catch (err) {
-            toast.error("Failed to generate preview", { description: err instanceof Error ? err.message : "Unknown error" });
+            toast.error(t("translation.fileManager.failedGeneratePreview"), { description: err instanceof Error ? translateMessage(err.message) : t("translation.audioConverter.unknownError") });
         }
     };
     const handleShowMetadata = async (filePath: string, e: React.MouseEvent) => {
@@ -283,7 +270,7 @@ export function FileManagerPage() {
             setShowMetadata(true);
         }
         catch (err) {
-            toast.error("Failed to read metadata", { description: err instanceof Error ? err.message : "Unknown error" });
+            toast.error(t("translation.migrated.FileManagerPage.failedToReadMetadata"), { description: err instanceof Error ? translateMessage(err.message) : t("translation.audioConverter.unknownError") });
             setMetadataInfo(null);
         }
         finally {
@@ -303,7 +290,7 @@ export function FileManagerPage() {
             setShowLyricsPreview(true);
         }
         catch (err) {
-            toast.error("Failed to read lyrics file", { description: err instanceof Error ? err.message : "Unknown error" });
+            toast.error(t("translation.fileManager.failedReadLyricsFile"), { description: err instanceof Error ? translateMessage(err.message) : t("translation.audioConverter.unknownError") });
         }
     };
     const handleShowCover = async (filePath: string, e: React.MouseEvent) => {
@@ -318,7 +305,7 @@ export function FileManagerPage() {
             setShowCoverPreview(true);
         }
         catch (err) {
-            toast.error("Failed to load image", { description: err instanceof Error ? err.message : "Unknown error" });
+            toast.error(t("translation.fileManager.failedLoadImage"), { description: err instanceof Error ? translateMessage(err.message) : t("translation.audioConverter.unknownError") });
         }
     };
     const getPlainLyrics = (content: string) => {
@@ -334,7 +321,7 @@ export function FileManagerPage() {
     };
     const renderSyncedLyrics = (content: string) => {
         if (!content)
-            return <div className="text-sm text-muted-foreground">No lyrics content</div>;
+            return <div className="text-sm text-muted-foreground">{t("translation.fileManager.noLyricsContent")}</div>;
         const lines = content.split('\n');
         const lineKeyCounts = new Map<string, number>();
         const getLineKey = (baseKey: string) => {
@@ -380,7 +367,7 @@ export function FileManagerPage() {
             setTimeout(() => setCopySuccess(false), 500);
         }
         catch {
-            toast.error("Failed to copy lyrics");
+            toast.error(t("translation.fileManager.failedCopyLyrics"));
         }
     };
     const handleManualRename = (filePath: string, e: React.MouseEvent) => {
@@ -397,12 +384,12 @@ export function FileManagerPage() {
         setManualRenaming(true);
         try {
             await RenameFileTo(manualRenameFile, manualRenameName.trim());
-            toast.success("File renamed successfully");
+            toast.success(t("translation.fileManager.fileRenamedSuccessfully"));
             setShowManualRename(false);
             loadFiles();
         }
         catch (err) {
-            toast.error("Failed to rename file", { description: err instanceof Error ? err.message : "Unknown error" });
+            toast.error(t("translation.fileManager.failedRenameFile"), { description: err instanceof Error ? translateMessage(err.message) : t("translation.audioConverter.unknownError") });
         }
         finally {
             setManualRenaming(false);
@@ -417,15 +404,15 @@ export function FileManagerPage() {
             const successCount = result.filter((r: backend.RenameResult) => r.success).length;
             const failCount = result.filter((r: backend.RenameResult) => !r.success).length;
             if (successCount > 0)
-                toast.success("Rename Complete", { description: `${successCount} file(s) renamed${failCount > 0 ? `, ${failCount} failed` : ""}` });
+                toast.success(t("translation.fileManager.renameComplete"), { description: t("translation.fileManager.renamed", { count: successCount, failures: failCount > 0 ? t("translation.common.failures", { count: failCount }) : "" }) });
             else
-                toast.error("Rename Failed", { description: `All ${failCount} file(s) failed to rename` });
+                toast.error(t("translation.fileManager.renameFailed"), { description: t("translation.fileManager.allFailed", { count: failCount }) });
             setShowPreview(false);
             setSelectedFiles(new Set());
             loadFiles();
         }
         catch (err) {
-            toast.error("Rename Failed", { description: err instanceof Error ? err.message : "Unknown error" });
+            toast.error(t("translation.fileManager.renameFailed"), { description: err instanceof Error ? translateMessage(err.message) : t("translation.audioConverter.unknownError") });
         }
         finally {
             setRenaming(false);
@@ -457,7 +444,7 @@ export function FileManagerPage() {
                 <Info className="h-3.5 w-3.5 text-muted-foreground"/>
               </button>
             </TooltipTrigger>
-            <TooltipContent>View Metadata</TooltipContent>
+            <TooltipContent>{t("translation.fileManager.viewMetadata")}</TooltipContent>
           </Tooltip>
         </>)}
       </div>
@@ -495,7 +482,7 @@ export function FileManagerPage() {
                 <Pencil className="h-3.5 w-3.5 text-muted-foreground"/>
               </button>
             </TooltipTrigger>
-            <TooltipContent>Rename</TooltipContent>
+            <TooltipContent>{t("translation.fileManager.rename")}</TooltipContent>
           </Tooltip>
         </>)}
       </div>
@@ -533,7 +520,7 @@ export function FileManagerPage() {
                 <Pencil className="h-3.5 w-3.5 text-muted-foreground"/>
               </button>
             </TooltipTrigger>
-            <TooltipContent>Rename</TooltipContent>
+            <TooltipContent>{t("translation.fileManager.rename")}</TooltipContent>
           </Tooltip>
         </>)}
       </div>
@@ -541,9 +528,9 @@ export function FileManagerPage() {
     </div>));
     };
     const allSelected = allAudioFiles.length > 0 && selectedFiles.size === allAudioFiles.length;
-    const fileScrollArea = (<div className={`overflow-y-auto p-2 ${isFullscreen ? "flex-1 min-h-0" : "max-h-100"}`}>
+    const fileScrollArea = (<div className="min-h-0 flex-1 overflow-y-auto p-2 custom-scrollbar">
         {loading ? (<div className="flex items-center justify-center py-8"><Spinner className="h-6 w-6"/></div>) : filteredFiles.length === 0 ? (<div className="text-center py-8 text-muted-foreground">
-          {rootPath ? `No ${activeTab} files found` : "Select a folder to browse"}
+          {rootPath ? t("translation.migrated.FileManagerPage.noFilesFound", { value1: activeTab }) : t("translation.migrated.FileManagerPage.selectAFolderToBrowse")}
         </div>) : (activeTab === "track" ? renderTrackTree(filteredFiles) :
             activeTab === "lyric" ? renderLyricTree(filteredFiles) :
                 renderCoverTree(filteredFiles))}
@@ -552,48 +539,48 @@ export function FileManagerPage() {
         <div className="flex items-center gap-2 min-w-0">
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={allSelected ? deselectAll : selectAll}>
+              <Button variant="ghost" size="icon" onClick={allSelected ? deselectAll : selectAll}>
                 {allSelected ? <CheckSquare className="h-4 w-4"/> : <Square className="h-4 w-4"/>}
               </Button>
             </TooltipTrigger>
-            <TooltipContent>{allSelected ? "Deselect All" : "Select All"}</TooltipContent>
+            <TooltipContent>{allSelected ? t("translation.migrated.FileManagerPage.deselectAll") : t("translation.migrated.FileManagerPage.selectAll")}</TooltipContent>
           </Tooltip>
           <span className="text-sm text-muted-foreground truncate">{selectedFiles.size} / {allAudioFiles.length}</span>
         </div>
         <div className="flex items-center gap-1 shrink-0">
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handlePreview(true)} disabled={selectedFiles.size === 0 || loading}>
+              <Button variant="outline" size="icon" onClick={() => handlePreview(true)} disabled={selectedFiles.size === 0 || loading}>
                 <Eye className="h-4 w-4"/>
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Preview</TooltipContent>
+            <TooltipContent>{t("translation.common.preview")}</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button size="icon" className="h-8 w-8" onClick={() => handlePreview(false)} disabled={selectedFiles.size === 0 || loading}>
+              <Button size="icon" onClick={() => handlePreview(false)} disabled={selectedFiles.size === 0 || loading}>
                 <Pencil className="h-4 w-4"/>
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Rename</TooltipContent>
+            <TooltipContent>{t("translation.fileManager.rename")}</TooltipContent>
           </Tooltip>
         </div>
       </div>);
-    return (<div className={`space-y-6 ${isFullscreen ? "h-full flex flex-col" : ""}`}>
+    return (<div className="flex h-[calc(100dvh-5.5rem)] min-h-0 flex-col gap-6 md:h-[calc(100dvh-6.5rem)]">
     <div className="flex items-center justify-between shrink-0">
-      <h1 className="text-2xl font-bold">File Manager</h1>
+      <h1 className="text-2xl font-bold">{t("translation.common.fileManager")}</h1>
     </div>
 
 
     <div className="flex items-center gap-2 shrink-0">
-      <InputWithContext value={rootPath} onChange={(e) => setRootPath(e.target.value)} placeholder="Select a folder..." className="flex-1"/>
+      <InputWithContext value={rootPath} onChange={(e) => setRootPath(e.target.value)} placeholder={t("translation.fileManager.selectFolder")} className="flex-1"/>
       <Button onClick={handleSelectFolder}>
         <FolderOpen className="h-4 w-4"/>
-        Browse
+        {t("translation.common.browse")}
       </Button>
       <Button variant="outline" onClick={loadFiles} disabled={loading || !rootPath}>
         <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}/>
-        Refresh
+        {t("translation.common.refresh")}
       </Button>
     </div>
 
@@ -601,28 +588,31 @@ export function FileManagerPage() {
     <div className="flex gap-2 border-b shrink-0">
       <Button variant={activeTab === "track" ? "default" : "ghost"} size="sm" onClick={() => setActiveTab("track")} className="rounded-b-none">
         <FileMusic className="h-4 w-4"/>
-        Track ({allAudioFiles.length})
+        {t("translation.fileManager.track")}
+        {allAudioFiles.length > 0 && (<span className={`font-mono text-xs ${activeTab === "track" ? "text-primary-foreground/70" : "text-muted-foreground"}`}>{allAudioFiles.length.toLocaleString("en-US")}</span>)}
       </Button>
       <Button variant={activeTab === "lyric" ? "default" : "ghost"} size="sm" onClick={() => setActiveTab("lyric")} className="rounded-b-none">
         <FileText className="h-4 w-4"/>
-        Lyric ({allLyricFiles.length})
+        {t("translation.fileManager.lyric")}
+        {allLyricFiles.length > 0 && (<span className={`font-mono text-xs ${activeTab === "lyric" ? "text-primary-foreground/70" : "text-muted-foreground"}`}>{allLyricFiles.length.toLocaleString("en-US")}</span>)}
       </Button>
       <Button variant={activeTab === "cover" ? "default" : "ghost"} size="sm" onClick={() => setActiveTab("cover")} className="rounded-b-none">
         <Image className="h-4 w-4"/>
-        Cover ({allCoverFiles.length})
+        {t("translation.fileManager.cover")}
+        {allCoverFiles.length > 0 && (<span className={`font-mono text-xs ${activeTab === "cover" ? "text-primary-foreground/70" : "text-muted-foreground"}`}>{allCoverFiles.length.toLocaleString("en-US")}</span>)}
       </Button>
     </div>
 
 
-    {activeTab === "track" ? (<div className={`grid grid-cols-1 lg:grid-cols-2 gap-6 ${isFullscreen ? "flex-1 min-h-0" : ""}`}>
-      <div className="min-w-0 lg:pr-6 lg:border-r border-border">
-        <FormatEditor title="Rename Format" value={renameFormat} defaultValue={DEFAULT_CUSTOM_FORMAT} tokens={RENAME_TEMPLATE_VARIABLES} suffix=".flac" placeholder="{title} - {artist}" onChange={setRenameFormat}/>
+    {activeTab === "track" ? (<div className="grid min-h-0 flex-1 grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="min-w-0 overflow-y-auto lg:border-r lg:border-border lg:pr-6 custom-scrollbar">
+        <FormatEditor title={t("translation.fileManager.renameFormat")} value={renameFormat} defaultValue={DEFAULT_CUSTOM_FORMAT} tokens={RENAME_TEMPLATE_VARIABLES} suffix=".flac" placeholder={t("literal.fileManager.titleArtist")} onChange={setRenameFormat}/>
       </div>
-      <div className={`border rounded-lg min-w-0 ${isFullscreen ? "flex flex-col min-h-0" : ""}`}>
+      <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border">
         {trackActionHeader}
         {fileScrollArea}
       </div>
-    </div>) : (<div className={`border rounded-lg ${isFullscreen ? "flex-1 flex flex-col min-h-0" : ""}`}>
+    </div>) : (<div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border">
       {fileScrollArea}
     </div>)}
 
@@ -630,8 +620,8 @@ export function FileManagerPage() {
     <Dialog open={showPreview} onOpenChange={setShowPreview}>
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col [&>button]:hidden">
         <DialogHeader>
-          <DialogTitle>Rename Preview</DialogTitle>
-          <DialogDescription>Review the changes before renaming. Files with errors will be skipped.</DialogDescription>
+          <DialogTitle>{t("translation.fileManager.renamePreview")}</DialogTitle>
+          <DialogDescription>{t("translation.fileManager.reviewChangesBeforeRenamingFiles")}</DialogDescription>
         </DialogHeader>
         <div className="flex-1 overflow-y-auto space-y-2 py-4">
           {previewData.map((item) => (<div key={`${item.old_name}-${item.new_name}`} className={`p-3 rounded-lg border ${item.error ? "border-destructive/50 bg-destructive/5" : "border-border"}`}>
@@ -642,10 +632,10 @@ export function FileManagerPage() {
           </div>))}
         </div>
         <DialogFooter>
-          {previewOnly ? (<Button onClick={() => setShowPreview(false)}>Close</Button>) : (<>
-            <Button variant="outline" onClick={() => setShowPreview(false)}>Cancel</Button>
+          {previewOnly ? (<Button onClick={() => setShowPreview(false)}>{t("translation.common.close")}</Button>) : (<>
+            <Button variant="outline" onClick={() => setShowPreview(false)}>{t("translation.common.cancel")}</Button>
             <Button onClick={handleRename} disabled={renaming}>
-              {renaming ? <><Spinner className="h-4 w-4"/>Renaming...</> : <>Rename {previewData.filter((p) => !p.error).length} File(s)</>}
+              {renaming ? <><Spinner className="h-4 w-4"/>{t("translation.fileManager.renaming")}</> : <>{t("translation.fileManager.rename")} {previewData.filter((p) => !p.error).length} {t("translation.common.fileTitle", { count: previewData.filter((p) => !p.error).length })}</>}
             </Button>
           </>)}
         </DialogFooter>
@@ -656,21 +646,21 @@ export function FileManagerPage() {
     <Dialog open={showMetadata} onOpenChange={setShowMetadata}>
       <DialogContent className="max-w-md [&>button]:hidden">
         <DialogHeader>
-          <DialogTitle>File Metadata</DialogTitle>
+          <DialogTitle>{t("translation.fileManager.fileMetadata")}</DialogTitle>
           <DialogDescription className="break-all">{metadataFile.split(/[/\\]/).pop()}</DialogDescription>
         </DialogHeader>
         {loadingMetadata ? (<div className="flex items-center justify-center py-8"><Spinner className="h-6 w-6"/></div>) : metadataInfo ? (<div className="space-y-3 py-2">
-          <div className="grid grid-cols-[100px_1fr] gap-2 text-sm"><span className="text-muted-foreground">Title</span><span>{metadataInfo.title || "-"}</span></div>
-          <div className="grid grid-cols-[100px_1fr] gap-2 text-sm"><span className="text-muted-foreground">Artist</span><span>{metadataInfo.artist || "-"}</span></div>
-          <div className="grid grid-cols-[100px_1fr] gap-2 text-sm"><span className="text-muted-foreground">Album</span><span>{metadataInfo.album || "-"}</span></div>
-          <div className="grid grid-cols-[100px_1fr] gap-2 text-sm"><span className="text-muted-foreground">Album Artist</span><span>{metadataInfo.album_artist || "-"}</span></div>
-          <div className="grid grid-cols-[100px_1fr] gap-2 text-sm"><span className="text-muted-foreground">Track</span><span>{metadataInfo.track_number || "-"}</span></div>
-          <div className="grid grid-cols-[100px_1fr] gap-2 text-sm"><span className="text-muted-foreground">Disc</span><span>{metadataInfo.disc_number || "-"}</span></div>
-          <div className="grid grid-cols-[100px_1fr] gap-2 text-sm"><span className="text-muted-foreground">Year</span><span>{metadataInfo.year ? metadataInfo.year.substring(0, 4) : "-"}</span></div>
-          <div className="grid grid-cols-[100px_1fr] gap-2 text-sm"><span className="text-muted-foreground">UPC</span><span>{metadataInfo.upc || "-"}</span></div>
+          <div className="grid grid-cols-[100px_1fr] gap-2 text-sm"><span className="text-muted-foreground">{t("translation.common.title")}</span><span>{metadataInfo.title || "-"}</span></div>
+          <div className="grid grid-cols-[100px_1fr] gap-2 text-sm"><span className="text-muted-foreground">{t("translation.common.artist")}</span><span>{metadataInfo.artist || "-"}</span></div>
+          <div className="grid grid-cols-[100px_1fr] gap-2 text-sm"><span className="text-muted-foreground">{t("translation.common.album")}</span><span>{metadataInfo.album || "-"}</span></div>
+          <div className="grid grid-cols-[100px_1fr] gap-2 text-sm"><span className="text-muted-foreground">{t("translation.common.albumArtist")}</span><span>{metadataInfo.album_artist || "-"}</span></div>
+          <div className="grid grid-cols-[100px_1fr] gap-2 text-sm"><span className="text-muted-foreground">{t("translation.fileManager.track2")}</span><span>{metadataInfo.track_number || "-"}</span></div>
+          <div className="grid grid-cols-[100px_1fr] gap-2 text-sm"><span className="text-muted-foreground">{t("translation.fileManager.disc")}</span><span>{metadataInfo.disc_number || "-"}</span></div>
+          <div className="grid grid-cols-[100px_1fr] gap-2 text-sm"><span className="text-muted-foreground">{t("translation.fileManager.year")}</span><span>{metadataInfo.year ? metadataInfo.year.substring(0, 4) : "-"}</span></div>
+          <div className="grid grid-cols-[100px_1fr] gap-2 text-sm"><span className="text-muted-foreground">{t("literal.common.upc")}</span><span>{metadataInfo.upc || "-"}</span></div>
           <div className="grid grid-cols-[100px_1fr] gap-2 text-sm"><span className="text-muted-foreground">ISRC</span><span>{metadataInfo.isrc || "-"}</span></div>
-        </div>) : (<div className="text-center py-4 text-muted-foreground">No metadata available</div>)}
-        <DialogFooter><Button onClick={() => setShowMetadata(false)}>Close</Button></DialogFooter>
+        </div>) : (<div className="text-center py-4 text-muted-foreground">{t("translation.fileManager.noMetadataAvailable")}</div>)}
+        <DialogFooter><Button onClick={() => setShowMetadata(false)}>{t("translation.common.close")}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
 
@@ -680,26 +670,26 @@ export function FileManagerPage() {
     <Dialog open={showLyricsPreview} onOpenChange={setShowLyricsPreview}>
       <DialogContent className="max-w-lg max-h-[80vh] overflow-hidden flex flex-col [&>button]:hidden">
         <DialogHeader>
-          <DialogTitle>Lyrics Preview</DialogTitle>
+          <DialogTitle>{t("translation.fileManager.lyricsPreview")}</DialogTitle>
           <DialogDescription className="break-all">{lyricsFile.split(/[/\\]/).pop()}</DialogDescription>
         </DialogHeader>
         <div className="flex gap-2 border-b pb-2">
-          <Button variant={lyricsTab === "synced" ? "default" : "ghost"} size="sm" onClick={() => setLyricsTab("synced")}>Synced</Button>
-          <Button variant={lyricsTab === "plain" ? "default" : "ghost"} size="sm" onClick={() => setLyricsTab("plain")}>Plain</Button>
+          <Button variant={lyricsTab === "synced" ? "default" : "ghost"} size="sm" onClick={() => setLyricsTab("synced")}>{t("translation.common.synced")}</Button>
+          <Button variant={lyricsTab === "plain" ? "default" : "ghost"} size="sm" onClick={() => setLyricsTab("plain")}>{t("translation.fileManager.plain")}</Button>
         </div>
         <div className="flex-1 overflow-y-auto py-4">
           {lyricsTab === "synced" ? (<div className="bg-muted/30 p-4 rounded-lg space-y-0">
             {renderSyncedLyrics(lyricsContent)}
           </div>) : (<pre className="text-sm whitespace-pre-wrap font-mono bg-muted/30 p-4 rounded-lg">
-            {getPlainLyrics(lyricsContent) || "No lyrics content"}
+            {getPlainLyrics(lyricsContent) || t("translation.fileManager.noLyricsContent")}
           </pre>)}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={handleCopyLyrics} className="gap-1.5">
-            {copySuccess ? <Check className="h-4 w-4"/> : <Copy className="h-4 w-4"/>}
-            Copy
+            {copySuccess ? <CircleCheck className="h-4 w-4"/> : <Copy className="h-4 w-4"/>}
+            {t("translation.common.copy")}
           </Button>
-          <Button onClick={() => setShowLyricsPreview(false)}>Close</Button>
+          <Button onClick={() => setShowLyricsPreview(false)}>{t("translation.common.close")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -708,13 +698,13 @@ export function FileManagerPage() {
     <Dialog open={showCoverPreview} onOpenChange={setShowCoverPreview}>
       <DialogContent className="max-w-lg [&>button]:hidden">
         <DialogHeader>
-          <DialogTitle>Cover Preview</DialogTitle>
+          <DialogTitle>{t("translation.fileManager.coverPreview")}</DialogTitle>
           <DialogDescription className="break-all">{coverFile.split(/[/\\]/).pop()}</DialogDescription>
         </DialogHeader>
         <div className="flex items-center justify-center p-4">
-          {coverData ? <img src={coverData} alt="Cover" className="max-w-full max-h-87.5 rounded-lg object-contain"/> : <div className="text-muted-foreground">Loading...</div>}
+          {coverData ? <img src={coverData} alt={t("translation.fileManager.cover2")} className="max-w-full max-h-87.5 rounded-lg object-contain"/> : <div className="text-muted-foreground">{t("translation.common.loading")}</div>}
         </div>
-        <DialogFooter><Button onClick={() => setShowCoverPreview(false)}>Close</Button></DialogFooter>
+        <DialogFooter><Button onClick={() => setShowCoverPreview(false)}>{t("translation.common.close")}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
 
@@ -722,13 +712,13 @@ export function FileManagerPage() {
     <Dialog open={showManualRename} onOpenChange={setShowManualRename}>
       <DialogContent className="max-w-2xl [&>button]:hidden">
         <DialogHeader>
-          <DialogTitle>Rename File</DialogTitle>
+          <DialogTitle>{t("translation.fileManager.renameFile")}</DialogTitle>
           <DialogDescription className="break-all">{manualRenameFile.split(/[/\\]/).pop()}</DialogDescription>
         </DialogHeader>
         <div className="py-4">
-          <Label htmlFor="newName" className="text-sm">New Name</Label>
+          <Label htmlFor="newName" className="text-sm">{t("translation.fileManager.newName")}</Label>
           <div className="flex items-center gap-2 mt-2">
-            <InputWithContext id="newName" value={manualRenameName} onChange={(e) => setManualRenameName(e.target.value)} placeholder="Enter new name" className="flex-1" onKeyDown={(e) => {
+            <InputWithContext id="newName" value={manualRenameName} onChange={(e) => setManualRenameName(e.target.value)} placeholder={t("translation.fileManager.enterNewName")} className="flex-1" onKeyDown={(e) => {
             if (e.key === "Enter" && !manualRenaming)
                 handleConfirmManualRename();
         }}/>
@@ -736,9 +726,9 @@ export function FileManagerPage() {
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => setShowManualRename(false)} disabled={manualRenaming}>Cancel</Button>
+          <Button variant="outline" onClick={() => setShowManualRename(false)} disabled={manualRenaming}>{t("translation.common.cancel")}</Button>
           <Button onClick={handleConfirmManualRename} disabled={manualRenaming || !manualRenameName.trim()}>
-            {manualRenaming ? <><Spinner className="h-4 w-4"/>Renaming...</> : "Rename"}
+            {manualRenaming ? <><Spinner className="h-4 w-4"/>{t("translation.fileManager.renaming")}</> : t("translation.migrated.FileManagerPage.rename")}
           </Button>
         </DialogFooter>
       </DialogContent>

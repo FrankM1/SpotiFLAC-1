@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 import { useRef, useState, type ReactNode } from "react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -59,7 +60,7 @@ export function FormatEditor({ title, value, defaultValue, tokens, suffix, place
         }
         field.onChange(next);
         void navigator.clipboard?.writeText(token).catch(() => undefined);
-        toast.success(`${token} copied`);
+        toast.success(t("translation.migrated.FormatEditor.copied", { value1: token }));
         requestAnimationFrame(() => {
             if (input) {
                 input.focus();
@@ -81,8 +82,8 @@ export function FormatEditor({ title, value, defaultValue, tokens, suffix, place
               </button>
             </div>
             <div className="rounded-lg border bg-muted/40 px-3 py-2">
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Preview</div>
-              <div className="font-mono text-sm break-all">{preview || <span className="text-muted-foreground italic">empty</span>}</div>
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{t("translation.common.preview")}</div>
+              <div className="font-mono text-sm break-all">{preview || <span className="text-muted-foreground italic">{t("translation.formatEditor.empty")}</span>}</div>
             </div>
           </div>);
     };
@@ -98,7 +99,7 @@ export function FormatEditor({ title, value, defaultValue, tokens, suffix, place
                 </button>
               </TooltipTrigger>
               <TooltipContent side="top">
-                <span className="font-mono">{disabled ? "Click a field first" : (token.example || "—")}</span>
+                <span className="font-mono">{disabled ? t("translation.migrated.FormatEditor.clickAFieldFirst") : (token.example || "—")}</span>
               </TooltipContent>
             </Tooltip>);
         })}

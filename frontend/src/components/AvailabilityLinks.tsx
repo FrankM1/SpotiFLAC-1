@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 import type { ReactNode } from "react";
 import type { TrackAvailability } from "@/types/api";
 import { openExternal } from "@/lib/utils";
@@ -43,7 +44,7 @@ export function AvailabilityLinks({ availability }: {
     availability?: TrackAvailability;
 }) {
     if (!availability) {
-        return <p>Check Availability</p>;
+        return <p>{t("translation.availabilityLinks.checkAvailability")}</p>;
     }
     const entries = getAvailabilityLinkEntries(availability);
     return (<div className="flex flex-col gap-1.5 w-[260px] max-w-[260px] pointer-events-auto">
@@ -55,7 +56,7 @@ export function AvailabilityLinks({ availability }: {
                 </button>) : (<div key={entry.id} className="flex items-center gap-2 text-left text-xs min-w-0">
                     {entry.icon}
                     <span className="truncate whitespace-nowrap leading-5 min-w-0 text-red-500">
-                        Not Found
+                        {t("translation.availabilityLinks.notFound")}
                     </span>
                 </div>))}
         </div>);

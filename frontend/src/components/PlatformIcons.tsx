@@ -1,5 +1,5 @@
+import { t } from "@/i18n";
 import amazonMusicIcon from "../assets/icons/amzn.png";
-import appleMusicIcon from "../assets/icons/am.png";
 import deezerIcon from "../assets/icons/dzr.png";
 import lrclibIcon from "../assets/icons/lrclib.png";
 import musicBrainzDarkIcon from "../assets/icons/musicbrainz_d.png";
@@ -75,31 +75,28 @@ function ThemedPlatformIcon({ lightSrc, darkSrc, alt, className = "w-4 h-4", def
     </span>;
 }
 export function TidalIcon({ className = "w-4 h-4" }: PlatformIconProps) {
-    return <ThemedPlatformIcon lightSrc={tidalLightIcon} darkSrc={tidalDarkIcon} alt="Tidal" className={className} defaultClassName="rounded-[4px]"/>;
+    return <ThemedPlatformIcon lightSrc={tidalLightIcon} darkSrc={tidalDarkIcon} alt={t("literal.common.tidal")} className={className} defaultClassName="rounded-[4px]"/>;
 }
 export function QobuzIcon({ className = "w-4 h-4" }: PlatformIconProps) {
-    return <PlatformIcon src={qobuzIcon} alt="Qobuz" className={className}/>;
+    return <PlatformIcon src={qobuzIcon} alt={t("literal.common.qobuz")} className={className}/>;
 }
 export function AmazonIcon({ className = "w-4 h-4" }: PlatformIconProps) {
-    return <PlatformIcon src={amazonMusicIcon} alt="Amazon Music" className={className} defaultClassName="rounded-[4px]"/>;
-}
-export function AppleMusicIcon({ className = "w-4 h-4" }: PlatformIconProps) {
-    return <PlatformIcon src={appleMusicIcon} alt="Apple Music" className={className} defaultClassName="rounded-[4px]"/>;
+    return <PlatformIcon src={amazonMusicIcon} alt={t("literal.common.amazonMusic")} className={className} defaultClassName="rounded-[4px]"/>;
 }
 export function DeezerIcon({ className = "w-4 h-4" }: PlatformIconProps) {
-    return <PlatformIcon src={deezerIcon} alt="Deezer" className={className} defaultClassName="rounded-[4px]"/>;
+    return <PlatformIcon src={deezerIcon} alt={t("literal.common.deezer")} className={className} defaultClassName="rounded-[4px]"/>;
 }
 export function LrclibIcon({ className = "w-4 h-4" }: PlatformIconProps) {
-    return <PlatformIcon src={lrclibIcon} alt="LRCLIB" className={className}/>;
+    return <PlatformIcon src={lrclibIcon} alt={t("literal.common.lrclib")} className={className}/>;
 }
 export function MusicBrainzIcon({ className = "w-4 h-4" }: PlatformIconProps) {
-    return <ThemedPlatformIcon lightSrc={musicBrainzLightIcon} darkSrc={musicBrainzDarkIcon} alt="MusicBrainz" className={className}/>;
+    return <ThemedPlatformIcon lightSrc={musicBrainzLightIcon} darkSrc={musicBrainzDarkIcon} alt={t("literal.common.musicbrainz")} className={className}/>;
 }
 export function SonglinkIcon({ className = "w-4 h-4" }: PlatformIconProps) {
-    return <ThemedPlatformIcon lightSrc={songlinkLightIcon} darkSrc={songlinkDarkIcon} alt="Songlink" className={className} defaultClassName="rounded-[3px]"/>;
+    return <ThemedPlatformIcon lightSrc={songlinkLightIcon} darkSrc={songlinkDarkIcon} alt={t("translation.migrated.PlatformIcons.songlink")} className={className} defaultClassName="rounded-[3px]"/>;
 }
 export function SongstatsIcon({ className = "w-4 h-4" }: PlatformIconProps) {
-    return <PlatformIcon src={songstatsIcon} alt="Songstats" className={className} defaultClassName="rounded-[3px]"/>;
+    return <PlatformIcon src={songstatsIcon} alt={t("literal.platformIcons.songstats")} className={className} defaultClassName="rounded-[3px]"/>;
 }
 export function TidalAvailabilityIcon({ className = "w-4 h-4" }: PlatformIconProps) {
     return <svg viewBox="0 0 24 24" className={`${className} fill-current`}>

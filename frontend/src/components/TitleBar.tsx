@@ -1,4 +1,5 @@
-import { X, Minus, Maximize, SlidersHorizontal, Globe, Eye, EyeOff } from "lucide-react";
+import { t, translateMessage } from "@/i18n";
+import { X, Minus, Maximize, SlidersHorizontal, Globe, Eye, EyeOff, ArrowLeft, ArrowRight, RotateCw } from "lucide-react";
 import { WindowMinimise, WindowToggleMaximise, Quit } from "../../wailsjs/runtime/runtime";
 import { Menubar, MenubarContent, MenubarMenu, MenubarItem, MenubarTrigger, MenubarLabel, MenubarSeparator } from "@/components/ui/menubar";
 import { Slider } from "@/components/ui/slider";
@@ -30,7 +31,14 @@ const SPOTIFY_BLOCKED_COUNTRY_CODES = new Set([
 interface SettingsUpdatedDetail {
     previewVolume?: number;
 }
-export function TitleBar() {
+interface TitleBarProps {
+    canGoBack?: boolean;
+    canGoForward?: boolean;
+    navigationDisabled?: boolean;
+    onBack?: () => void;
+    onForward?: () => void;
+}
+export function TitleBar({ canGoBack = false, canGoForward = false, navigationDisabled = false, onBack, onForward, }: TitleBarProps) {
     const initialSettings = getSettings();
     const [previewVolume, setPreviewVolume] = useState(initialSettings.previewVolume ?? 100);
     const [currentIPInfo, setCurrentIPInfo] = useState<CurrentIPInfo | null>(null);
@@ -67,7 +75,7 @@ export function TitleBar() {
         catch (error) {
             if (!silent || !currentIPInfoRef.current) {
                 setCurrentIPInfo(null);
-                setCurrentIPInfoError(error instanceof Error ? error.message : "Unable to detect IP");
+                setCurrentIPInfoError(error instanceof Error ? translateMessage(error.message) : t("translation.titleBar.unableDetectIp"));
             }
         }
         finally {
@@ -129,28 +137,34 @@ export function TitleBar() {
 
       <div className="fixed top-0 left-14 right-0 h-10 z-40 bg-background/80 backdrop-blur-sm" style={{ "--wails-draggable": "drag" } as React.CSSProperties} onDoubleClick={handleMaximize}/>
 
+      <div className="fixed top-1.5 left-16 z-50 flex h-7 items-center gap-0.5" style={{ "--wails-draggable": "no-drag" } as React.CSSProperties}>
+        <button type="button" onClick={onBack} disabled={!canGoBack || navigationDisabled} className="flex size-7 cursor-pointer items-center justify-center rounded transition-colors hover:bg-muted disabled:cursor-default disabled:opacity-35 disabled:hover:bg-transparent" aria-label={t("translation.common.goPreviousPage")}><ArrowLeft className="h-3.5 w-3.5"/></button>
+        <button type="button" onClick={onForward} disabled={!canGoForward || navigationDisabled} className="flex size-7 cursor-pointer items-center justify-center rounded transition-colors hover:bg-muted disabled:cursor-default disabled:opacity-35 disabled:hover:bg-transparent" aria-label={t("translation.common.goNextPage")}><ArrowRight className="h-3.5 w-3.5"/></button>
+        <button type="button" onClick={() => window.location.reload()} className="flex size-7 cursor-pointer items-center justify-center rounded transition-colors hover:bg-muted" aria-label={t("translation.header.reload")}><RotateCw className="h-3.5 w-3.5"/></button>
+      </div>
+
 
       <div className="fixed top-1.5 right-2 z-50 flex h-7 gap-0.5 items-center">
         <Menubar className="border-none bg-transparent shadow-none px-0 mr-1" style={{ "--wails-draggable": "no-drag" } as React.CSSProperties}>
             <MenubarMenu>
-                <MenubarTrigger className="cursor-pointer w-8 h-7 p-0 flex items-center justify-center hover:bg-muted transition-colors rounded data-[state=open]:bg-muted">
+                <MenubarTrigger className="cursor-pointer size-7 p-0 flex items-center justify-center hover:bg-muted transition-colors rounded data-[state=open]:bg-muted">
                     <SlidersHorizontal className="w-3.5 h-3.5"/>
                 </MenubarTrigger>
-                <MenubarContent align="end" className="min-w-70">
+                <MenubarContent align="end" className="w-max max-w-[calc(100vw-1rem)]">
                     <div className="px-2 py-1.5 space-y-2">
                         <div className="flex items-center justify-between gap-3">
-                            <MenubarLabel className="p-0">Preview Volume</MenubarLabel>
+                            <MenubarLabel className="p-0">{t("translation.titleBar.previewVolume")}</MenubarLabel>
                             <span className="text-xs font-medium text-muted-foreground tabular-nums">
                                 {previewVolume}%
                             </span>
                         </div>
-                        <Slider value={[previewVolume]} min={0} max={100} step={5} onValueChange={handlePreviewVolumeChange} onValueCommit={handlePreviewVolumeCommit} aria-label="Preview volume"/>
+                        <Slider value={[previewVolume]} min={0} max={100} step={5} onValueChange={handlePreviewVolumeChange} onValueCommit={handlePreviewVolumeCommit} aria-label={t("translation.titleBar.previewVolume2")}/>
                     </div>
                     <MenubarSeparator />
                     <div className="flex items-center gap-1.5 px-2 py-1.5">
-                        <MenubarLabel className="p-0">Network</MenubarLabel>
+                        <MenubarLabel className="p-0">{t("translation.titleBar.network")}</MenubarLabel>
                         {isSpotifyBlockedCountry && (<span className="text-xs font-medium text-destructive">
-                            (Blocked by Spotify)
+                            {t("translation.titleBar.blockedBySpotify")}
                         </span>)}
                     </div>
                     <div className="px-2 py-1.5 space-y-1">
@@ -159,37 +173,37 @@ export function TitleBar() {
                                 {detectedFlagPath ? (<img src={detectedFlagPath} alt={detectedCountryCode} className="h-3.5 w-4.5 rounded-[2px] border object-cover bg-muted"/>) : (<Globe className="w-4 h-4 opacity-70"/>)}
                                 <span className="font-mono text-xs truncate">
                                     {isLoadingCurrentIPInfo
-            ? "Detecting..."
+            ? t("translation.migrated.TitleBar.detecting")
             : currentIPInfo
                 ? showIPAddress
-                    ? `${currentIPInfo.ip} - ${currentIPInfo.country}${detectedCountryCode ? ` (${detectedCountryCode})` : ""}`
-                    : `${currentIPInfo.country}${detectedCountryCode ? ` (${detectedCountryCode})` : ""}`
-                : "Unavailable"}
+                    ? currentIPInfo.ip
+                    : t("translation.titleBar.value1Value2", { value1: currentIPInfo.country, value2: detectedCountryCode ? `(${detectedCountryCode})` : "" })
+                : t("translation.migrated.TitleBar.unavailable")}
                                 </span>
                             </div>
-                            {currentIPInfo && !isLoadingCurrentIPInfo && (<button type="button" onClick={() => setShowIPAddress((prev) => !prev)} className="inline-flex h-6 w-6 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" aria-label={showIPAddress ? "Hide IP" : "Show IP"}>
+                            {currentIPInfo && !isLoadingCurrentIPInfo && (<button type="button" onClick={() => setShowIPAddress((prev) => !prev)} className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" aria-label={showIPAddress ? t("translation.migrated.TitleBar.hideIP") : t("translation.migrated.TitleBar.showIP")}>
                                 {showIPAddress ? <EyeOff className="h-3.5 w-3.5"/> : <Eye className="h-3.5 w-3.5"/>}
                             </button>)}
                         </div>
                         {!isLoadingCurrentIPInfo && !currentIPInfo && currentIPInfoError && (<div className="text-xs text-muted-foreground">
-                            IP detection unavailable
+                            {t("translation.titleBar.ipDetectionUnavailable")}
                         </div>)}
                     </div>
                     <MenubarSeparator />
-                    <MenubarItem onClick={() => openExternal("https://afkarxyz.fyi")} className="gap-2">
+                    <MenubarItem onClick={() => openExternal("https://afkarxyz.fyi")} className="cursor-pointer gap-2">
                         <Globe className="w-4 h-4 opacity-70"/>
-                        <span>Website</span>
+                        <span>{t("translation.titleBar.website")}</span>
                     </MenubarItem>
                 </MenubarContent>
             </MenubarMenu>
         </Menubar>
-        <button onClick={handleMinimize} className="w-8 h-7 flex items-center justify-center hover:bg-muted transition-colors rounded" style={{ "--wails-draggable": "no-drag" } as React.CSSProperties} aria-label="Minimize">
+        <button onClick={handleMinimize} className="size-7 cursor-pointer flex items-center justify-center hover:bg-muted transition-colors rounded" style={{ "--wails-draggable": "no-drag" } as React.CSSProperties} aria-label={t("translation.titleBar.minimize")}>
           <Minus className="w-3.5 h-3.5"/>
         </button>
-        <button onClick={handleMaximize} className="w-8 h-7 flex items-center justify-center hover:bg-muted transition-colors rounded" style={{ "--wails-draggable": "no-drag" } as React.CSSProperties} aria-label="Maximize">
+        <button onClick={handleMaximize} className="size-7 cursor-pointer flex items-center justify-center hover:bg-muted transition-colors rounded" style={{ "--wails-draggable": "no-drag" } as React.CSSProperties} aria-label={t("translation.titleBar.maximize")}>
           <Maximize className="w-3.5 h-3.5"/>
         </button>
-        <button onClick={handleClose} className="w-8 h-7 flex items-center justify-center hover:bg-destructive hover:text-white transition-colors rounded" style={{ "--wails-draggable": "no-drag" } as React.CSSProperties} aria-label="Close">
+        <button onClick={handleClose} className="size-7 cursor-pointer flex items-center justify-center hover:bg-destructive hover:text-white transition-colors rounded" style={{ "--wails-draggable": "no-drag" } as React.CSSProperties} aria-label={t("translation.common.close")}>
           <X className="w-3.5 h-3.5"/>
         </button>
       </div>

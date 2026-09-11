@@ -80,6 +80,13 @@ func SanitizeSettingsMap(settings map[string]interface{}) map[string]interface{}
 	sanitized["customTidalApi"] = customAPI
 	sanitized["downloader"] = sanitizeDownloaderValue(sanitized["downloader"])
 	sanitized["autoOrder"] = sanitizeAutoOrderValue(sanitized["autoOrder"])
+	if replayGainMode, exists := sanitized["autoReplayGainMode"]; exists {
+		if value, _ := replayGainMode.(string); strings.EqualFold(strings.TrimSpace(value), "track") {
+			sanitized["autoReplayGainMode"] = "track"
+		} else {
+			sanitized["autoReplayGainMode"] = "album"
+		}
+	}
 
 	return sanitized
 }
@@ -118,8 +125,8 @@ func SanitizePersistedConfigSettings() error {
 		return err
 	}
 
-	sanitized := SanitizeSettingsMap(settings)
-	payload, err := json.MarshalIndent(sanitized, "", "  ")
+	sanitized := SanitizeSettingsMap(FlattenConfigSettings(settings))
+	payload, err := MarshalConfigSettings(sanitized)
 	if err != nil {
 		return err
 	}
@@ -167,18 +174,18 @@ func LoadConfigSettings() (map[string]interface{}, error) {
 		return nil, err
 	}
 
-	return SanitizeSettingsMap(settings), nil
+	return SanitizeSettingsMap(FlattenConfigSettings(settings)), nil
 }
 
 func GetRedownloadWithSuffixSetting() bool {
 	settings, err := LoadConfigSettings()
 	if err != nil || settings == nil {
-		return true
+		return false
 	}
 
 	enabled, ok := settings["redownloadWithSuffix"].(bool)
 	if !ok {
-		return true
+		return false
 	}
 	return enabled
 }
@@ -196,6 +203,8 @@ func normalizeExistingFileCheckMode(value string) string {
 	switch strings.TrimSpace(strings.ToLower(value)) {
 	case "isrc", "upc":
 		return "isrc"
+	case "hybrid":
+		return "hybrid"
 	default:
 		return "filename"
 	}

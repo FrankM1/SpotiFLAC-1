@@ -1,8 +1,8 @@
+import { t, translateMessage } from "@/i18n";
 import { useState, useEffect, useRef } from "react";
-import { Trash2, Copy, Check, FileDown } from "lucide-react";
+import { Trash2, Copy, CircleCheck, FileDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { logger, type LogEntry } from "@/lib/logger";
-import { useDownloadQueueData } from "@/hooks/useDownloadQueueData";
 import { ExportFailedDownloads } from "../../wailsjs/go/main/App";
 import { toastWithSound as toast } from "@/lib/toast-with-sound";
 const levelColors: Record<string, string> = {
@@ -24,13 +24,6 @@ export function DebugLoggerPage() {
     const [logs, setLogs] = useState<LogEntry[]>([]);
     const [copied, setCopied] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
-    const queueInfo = useDownloadQueueData();
-    const hasDownloadActivity = queueInfo.queue.length > 0 ||
-        queueInfo.queued_count > 0 ||
-        queueInfo.completed_count > 0 ||
-        queueInfo.failed_count > 0 ||
-        queueInfo.skipped_count > 0;
-    const canExportFailed = hasDownloadActivity && queueInfo.failed_count > 0;
     useEffect(() => {
         const unsubscribe = logger.subscribe(() => {
             setLogs(logger.getLogs());
@@ -62,44 +55,41 @@ export function DebugLoggerPage() {
         }
     };
     const handleExportFailed = async () => {
-        if (!canExportFailed) {
-            return;
-        }
         try {
             const message = await ExportFailedDownloads();
             if (message.startsWith("Successfully")) {
-                toast.success(message);
+                toast.success(translateMessage(message));
             }
             else if (message !== "Export cancelled") {
-                toast.info(message);
+                toast.info(translateMessage(message));
             }
         }
         catch (error) {
             console.error("Failed to export:", error);
-            toast.error(`Failed to export: ${error}`);
+            toast.error(t("translation.migrated.DebugLoggerPage.failedToExport", { value1: error }));
         }
     };
     return (<div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Debug Logs</h1>
+        <h1 className="text-2xl font-bold">{t("translation.common.debugLogs")}</h1>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={handleExportFailed} disabled={!canExportFailed}>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={handleExportFailed}>
             <FileDown className="h-4 w-4"/>
-            Export Failed
+            {t("translation.audioAnalysis.exportFailed")}
           </Button>
           <Button variant="outline" size="sm" className="gap-1.5" onClick={handleCopy} disabled={logs.length === 0}>
-            {copied ? <Check className="h-4 w-4"/> : <Copy className="h-4 w-4"/>}
-            Copy
+            {copied ? <CircleCheck className="h-4 w-4"/> : <Copy className="h-4 w-4"/>}
+            {t("translation.common.copy")}
           </Button>
-          <Button variant="outline" size="sm" className="gap-1.5" onClick={handleClear} disabled={logs.length === 0}>
+          <Button variant="destructive" size="sm" className="gap-1.5" onClick={handleClear} disabled={logs.length === 0}>
             <Trash2 className="h-4 w-4"/>
-            Clear
+            {t("translation.common.clear")}
           </Button>
         </div>
       </div>
 
       <div ref={scrollRef} className="h-[calc(100vh-220px)] overflow-y-auto bg-muted/50 rounded-lg p-4 font-mono text-xs">
-        {logs.length === 0 ? (<p className="text-muted-foreground lowercase">no logs yet...</p>) : (logs.map((log, i) => (<div key={i} className="flex gap-2 py-0.5">
+        {logs.length === 0 ? (<p className="text-muted-foreground lowercase">{t("translation.debugLogger.noLogsYet")}</p>) : (logs.map((log, i) => (<div key={i} className="flex gap-2 py-0.5">
               <span className="text-muted-foreground shrink-0">
                 [{formatTime(log.timestamp)}]
               </span>

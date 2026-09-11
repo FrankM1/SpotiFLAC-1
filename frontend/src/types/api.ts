@@ -25,6 +25,10 @@ export interface TrackMetadata {
     artists_data?: ArtistSimple[];
     isrc?: string;
     upc?: string;
+    auto_convert_audio?: boolean;
+    auto_convert_format?: "mp3" | "m4a-aac" | "m4a-alac" | "wav" | "aiff" | "opus";
+    auto_convert_bitrate?: "320k" | "256k" | "192k" | "128k";
+    auto_convert_delete_original?: boolean;
     copyright?: string;
     publisher?: string;
     plays?: string;
@@ -124,7 +128,11 @@ export interface DownloadRequest {
     tidal_api_url?: string;
     qobuz_api_url?: string;
     output_dir?: string;
+    library_root?: string;
     audio_format?: string;
+    allow_fallback?: boolean;
+    allow_atmos_fallback?: boolean;
+    atmos_fallback_quality?: "16" | "24";
     folder_name?: string;
     filename_format?: string;
     track_number?: boolean;
@@ -132,6 +140,10 @@ export interface DownloadRequest {
     use_album_track_number?: boolean;
     spotify_id?: string;
     embed_lyrics?: boolean;
+    lyrics_translation_mode?: "off" | "chatgpt" | "gemini";
+    lyrics_translation_lang?: string;
+    lyrics_translation_auto_fallback?: boolean;
+    lrclib_title_fallback?: boolean;
     embed_max_quality_cover?: boolean;
     service_url?: string;
     duration?: number;
@@ -147,10 +159,15 @@ export interface DownloadRequest {
     use_first_artist_only?: boolean;
     use_single_genre?: boolean;
     embed_genre?: boolean;
+    separator?: string;
     save_cover?: boolean;
     artists?: string;
     category?: string;
     upc?: string;
+    auto_resample_audio?: boolean;
+    auto_resample_sample_rate?: "44100" | "48000" | "96000" | "192000";
+    auto_resample_bit_depth?: "16" | "24";
+    auto_resample_delete_original?: boolean;
 }
 export interface DownloadResponse {
     success: boolean;
@@ -162,6 +179,8 @@ export interface DownloadResponse {
     item_id?: string;
     source_url?: string;
     source_label?: string;
+    original_file?: string;
+    converted_file?: string;
 }
 export interface HealthResponse {
     status: string;
@@ -223,6 +242,10 @@ export interface LyricsDownloadRequest {
     disc_number?: number;
     total_tracks?: number;
     total_discs?: number;
+    lyrics_translation_mode?: "off" | "chatgpt" | "gemini";
+    lyrics_translation_lang?: string;
+    lyrics_translation_auto_fallback?: boolean;
+    lrclib_title_fallback?: boolean;
 }
 export interface LyricsDownloadResponse {
     success: boolean;

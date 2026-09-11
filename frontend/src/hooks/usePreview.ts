@@ -1,3 +1,4 @@
+import { t, translateMessage } from "@/i18n";
 import { useEffect, useRef, useState } from "react";
 import { GetPreviewURL } from "@/../wailsjs/go/main/App";
 import { getPreviewVolume } from "@/lib/preview";
@@ -34,8 +35,8 @@ export function usePreview() {
             setLoadingPreview(trackId);
             const previewURL = await GetPreviewURL(trackId);
             if (!previewURL) {
-                toast.error("Preview not available", {
-                    description: `No preview found for "${trackName}"`,
+                toast.error(t("translation.download.previewNotAvailable"), {
+                    description: t("translation.download.noPreviewFoundValue1", { value1: trackName }),
                 });
                 setLoadingPreview(null);
                 return;
@@ -54,8 +55,8 @@ export function usePreview() {
                 }
             });
             audio.addEventListener("error", () => {
-                toast.error("Failed to play preview", {
-                    description: `Could not play preview for "${trackName}"`,
+                toast.error(t("translation.download.failedPlayPreview"), {
+                    description: t("translation.download.couldNotPlayPreviewValue1", { value1: trackName }),
                 });
                 setLoadingPreview(null);
                 setPlayingTrack(null);
@@ -70,8 +71,8 @@ export function usePreview() {
         catch (error: unknown) {
             stopCurrentAudio();
             console.error("Preview error:", error);
-            toast.error("Preview not available", {
-                description: error instanceof Error ? error.message : `Could not load preview for "${trackName}"`,
+            toast.error(t("translation.download.previewNotAvailable"), {
+                description: error instanceof Error ? translateMessage(error.message) : t("translation.download.couldNotLoadPreviewValue1", { value1: trackName }),
             });
             setLoadingPreview(null);
             setPlayingTrack(null);

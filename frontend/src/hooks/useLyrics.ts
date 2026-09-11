@@ -1,3 +1,4 @@
+import { t, translateMessage } from "@/i18n";
 import { useState, useRef } from "react";
 import { downloadLyrics } from "@/lib/api";
 import { getSettings, parseTemplate, templateUsesAlbumTrackNumber, getAlbumCategoryLabel, type TemplateData } from "@/lib/settings";
@@ -17,6 +18,7 @@ async function resolveTemplateISRC(settings: {
     const folderTemplate = settings.folderTemplate || "";
     const filenameTemplate = settings.filenameTemplate || "";
     const shouldResolveISRC = settings.existingFileCheckMode === "isrc" ||
+        settings.existingFileCheckMode === "hybrid" ||
         folderTemplate.includes("{isrc}") ||
         filenameTemplate.includes("{isrc}");
     if (!shouldResolveISRC) {
@@ -39,7 +41,7 @@ export function useLyrics() {
     const stopBulkDownloadRef = useRef(false);
     const handleDownloadLyrics = async (spotifyId: string, trackName: string, artistName: string, albumName?: string, playlistName?: string, position?: number, albumArtist?: string, releaseDate?: string, discNumber?: number, isAlbum?: boolean) => {
         if (!spotifyId) {
-            toast.error("No Spotify ID found for this track");
+            toast.error(t("translation.download.noSpotifyIdFoundTrack"));
             return;
         }
         logger.info(`downloading lyrics: ${trackName} - ${artistName}`);
@@ -50,8 +52,8 @@ export function useLyrics() {
             let outputDir = settings.downloadPath;
             const placeholder = "__SLASH_PLACEHOLDER__";
             const yearValue = releaseDate?.substring(0, 4);
-            const displayArtist = settings.useFirstArtistOnly && artistName ? getFirstArtist(artistName) : artistName;
-            const displayAlbumArtist = settings.useFirstArtistOnly && albumArtist ? getFirstArtist(albumArtist) : albumArtist;
+            const displayArtist = artistName ? getFirstArtist(artistName) : artistName;
+            const displayAlbumArtist = albumArtist ? getFirstArtist(albumArtist) : albumArtist;
             const resolvedTemplateISRC = await resolveTemplateISRC(settings, spotifyId);
             const templateData: TemplateData = {
                 artist: displayArtist?.replace(/\//g, placeholder),
@@ -100,11 +102,11 @@ export function useLyrics() {
             });
             if (response.success) {
                 if (response.already_exists) {
-                    toast.info("Lyrics file already exists");
+                    toast.info(t("translation.download.lyricsFileAlreadyExists"));
                     setSkippedLyrics((prev) => new Set(prev).add(spotifyId));
                 }
                 else {
-                    toast.success("Lyrics downloaded successfully");
+                    toast.success(t("translation.download.lyricsDownloadedSuccessfully"));
                     setDownloadedLyrics((prev) => new Set(prev).add(spotifyId));
                 }
                 setFailedLyrics((prev) => {
@@ -114,12 +116,12 @@ export function useLyrics() {
                 });
             }
             else {
-                toast.error(response.error || "Failed to download lyrics");
+                toast.error(translateMessage(response.error || t("translation.download.failedDownloadLyrics")));
                 setFailedLyrics((prev) => new Set(prev).add(spotifyId));
             }
         }
         catch (err) {
-            toast.error(err instanceof Error ? err.message : "Failed to download lyrics");
+            toast.error(err instanceof Error ? translateMessage(err.message) : t("translation.migrated.useLyrics.failedToDownloadLyrics"));
             setFailedLyrics((prev) => new Set(prev).add(spotifyId));
         }
         finally {
@@ -129,7 +131,7 @@ export function useLyrics() {
     const handleDownloadAllLyrics = async (tracks: TrackMetadata[], playlistName?: string, _isArtistDiscography?: boolean, isAlbum?: boolean) => {
         const tracksWithSpotifyId = tracks.filter((track) => track.spotify_id);
         if (tracksWithSpotifyId.length === 0) {
-            toast.error("No tracks with Spotify ID available for lyrics download");
+            toast.error(t("translation.download.noTracksSpotifyIdAvailable"));
             return;
         }
         const settings = getSettings();
@@ -144,7 +146,7 @@ export function useLyrics() {
         for (let i = 0; i < tracksWithSpotifyId.length; i++) {
             const track = tracksWithSpotifyId[i];
             if (stopBulkDownloadRef.current) {
-                toast.info("Lyrics download stopped by user");
+                toast.info(t("translation.download.lyricsDownloadStoppedByUser"));
                 break;
             }
             const id = track.spotify_id!;
@@ -157,8 +159,8 @@ export function useLyrics() {
                 const useAlbumTrackNumber = templateUsesAlbumTrackNumber(settings);
                 const trackPosition = useAlbumTrackNumber ? (track.track_number || i + 1) : (i + 1);
                 const yearValue = track.release_date?.substring(0, 4);
-                const displayArtist = settings.useFirstArtistOnly && track.artists ? getFirstArtist(track.artists) : track.artists;
-                const displayAlbumArtist = settings.useFirstArtistOnly && track.album_artist ? getFirstArtist(track.album_artist) : track.album_artist;
+                const displayArtist = track.artists ? getFirstArtist(track.artists) : track.artists;
+                const displayAlbumArtist = track.album_artist ? getFirstArtist(track.album_artist) : track.album_artist;
                 const resolvedTemplateISRC = await resolveTemplateISRC(settings, id);
                 const templateData: TemplateData = {
                     artist: displayArtist?.replace(/\//g, placeholder),
@@ -239,13 +241,13 @@ export function useLyrics() {
         setIsBulkDownloadingLyrics(false);
         setLyricsDownloadProgress(0);
         if (!stopBulkDownloadRef.current) {
-            toast.success(`Lyrics: ${success} downloaded, ${skipped} skipped, ${failed} failed`);
+            toast.success(t("translation.migrated.useLyrics.lyricsDownloadedSkippedFailed", { value1: success, value2: skipped, value3: failed }));
         }
     };
     const handleStopLyricsDownload = () => {
         logger.info("lyrics download stopped by user");
         stopBulkDownloadRef.current = true;
-        toast.info("Stopping lyrics download...");
+        toast.info(t("translation.download.stoppingLyricsDownload"));
     };
     const resetLyricsState = () => {
         setDownloadedLyrics(new Set());

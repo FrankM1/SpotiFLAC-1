@@ -1,3 +1,4 @@
+import { t, translateMessage } from "@/i18n";
 import { useState, useCallback, useRef, useEffect, type MutableRefObject } from "react";
 import type { AnalysisResult } from "@/types/api";
 import { logger } from "@/lib/logger";
@@ -57,7 +58,7 @@ interface ProgressState {
 }
 const DEFAULT_PROGRESS_STATE: ProgressState = {
     percent: 0,
-    message: "Preparing analysis...",
+    message: t("translation.download.preparingAnalysis"),
 };
 interface CancelToken {
     cancelled: boolean;
@@ -174,7 +175,7 @@ export function useAudioAnalysis() {
     }, [setCurrentAnalysisKey, setErrorWithSession, setResultWithSession, setSelectedFilePathWithSession]);
     const analyzeFile = useCallback(async (file: File, options?: AnalyzeExecutionOptions): Promise<AnalyzeExecutionOutcome> => {
         if (!file) {
-            const errorMessage = "No file provided";
+            const errorMessage = t("translation.download.noFileProvided");
             setErrorWithSession(errorMessage);
             return {
                 result: null,
@@ -189,7 +190,7 @@ export function useAudioAnalysis() {
         setAnalyzing(true);
         setAnalysisProgress({
             percent: 1,
-            message: "Preparing file...",
+            message: t("translation.download.preparingFile"),
         });
         setErrorWithSession(null);
         setResultWithSession(null);
@@ -232,15 +233,15 @@ export function useAudioAnalysis() {
                     cancelled: true,
                 };
             }
-            const errorMessage = err instanceof Error ? err.message : "Failed to analyze audio file";
+            const errorMessage = err instanceof Error ? translateMessage(err.message) : t("translation.download.failedAnalyzeAudioFile");
             logger.error(`Analysis error: ${errorMessage}`);
             setErrorWithSession(errorMessage);
             setAnalysisProgress({
                 percent: 0,
-                message: "Analysis failed",
+                message: t("translation.download.analysisFailed"),
             });
             if (!options?.suppressToast) {
-                toast.error("Audio Analysis Failed", {
+                toast.error(t("translation.download.audioAnalysisFailed"), {
                     description: errorMessage,
                 });
             }
@@ -259,7 +260,7 @@ export function useAudioAnalysis() {
     }, [setCurrentAnalysisKey, setErrorWithSession, setResultWithSession, setSelectedFilePathWithSession, storeSuccessfulAnalysis]);
     const analyzeFilePath = useCallback(async (filePath: string, options?: AnalyzeExecutionOptions): Promise<AnalyzeExecutionOutcome> => {
         if (!filePath) {
-            const errorMessage = "No file path provided";
+            const errorMessage = t("translation.download.noFilePathProvided");
             setErrorWithSession(errorMessage);
             return {
                 result: null,
@@ -274,7 +275,7 @@ export function useAudioAnalysis() {
         setAnalyzing(true);
         setAnalysisProgress({
             percent: 1,
-            message: "Reading file from disk...",
+            message: t("translation.download.readingFileDisk"),
         });
         setErrorWithSession(null);
         setResultWithSession(null);
@@ -298,7 +299,7 @@ export function useAudioAnalysis() {
             }
             setAnalysisProgress({
                 percent: 10,
-                message: "File loaded",
+                message: t("translation.download.fileLoaded"),
             });
             const arrayBuffer = await base64ToArrayBuffer(base64Data, () => token.cancelled);
             base64Data = "";
@@ -311,7 +312,7 @@ export function useAudioAnalysis() {
             }
             setAnalysisProgress({
                 percent: 15,
-                message: "Preparing audio buffer...",
+                message: t("translation.download.preparingAudioBuffer"),
             });
             const fileName = fileNameFromPath(filePath);
             const input = {
@@ -348,7 +349,7 @@ export function useAudioAnalysis() {
                 logger.warning(`Browser decoder failed for ${fileName}; trying FFmpeg fallback`);
                 setAnalysisProgress({
                     percent: 18,
-                    message: "Browser decoder failed, trying FFmpeg fallback...",
+                    message: t("translation.download.browserDecoderFailedTryingFfmpeg"),
                 });
                 const decoded = await decodeAudioForAnalysis(filePath);
                 if (token.cancelled) {
@@ -360,7 +361,7 @@ export function useAudioAnalysis() {
                 }
                 setAnalysisProgress({
                     percent: 24,
-                    message: "Decoding audio with FFmpeg...",
+                    message: t("translation.download.decodingAudioFfmpeg"),
                 });
                 const pcmBase64 = decoded.pcm_base64 || "";
                 if (!pcmBase64) {
@@ -403,15 +404,15 @@ export function useAudioAnalysis() {
                     cancelled: true,
                 };
             }
-            const errorMessage = err instanceof Error ? err.message : "Failed to analyze audio file";
+            const errorMessage = err instanceof Error ? translateMessage(err.message) : t("translation.download.failedAnalyzeAudioFile");
             logger.error(`Analysis error: ${errorMessage}`);
             setErrorWithSession(errorMessage);
             setAnalysisProgress({
                 percent: 0,
-                message: "Analysis failed",
+                message: t("translation.download.analysisFailed"),
             });
             if (!options?.suppressToast) {
-                toast.error("Audio Analysis Failed", {
+                toast.error(t("translation.download.audioAnalysisFailed"), {
                     description: errorMessage,
                 });
             }
@@ -459,7 +460,7 @@ export function useAudioAnalysis() {
         setAnalysisProgress((prev) => prev.percent > 0
             ? {
                 percent: prev.percent,
-                message: "Analysis stopped",
+                message: t("translation.download.analysisStopped"),
             }
             : DEFAULT_PROGRESS_STATE);
     }, []);
@@ -471,7 +472,7 @@ export function useAudioAnalysis() {
         setSpectrumLoading(true);
         setSpectrumProgress({
             percent: 0,
-            message: "Preparing FFT...",
+            message: t("translation.download.preparingFft"),
         });
         try {
             await new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -498,13 +499,13 @@ export function useAudioAnalysis() {
             if (isCancelledError(err)) {
                 return null;
             }
-            const errorMessage = err instanceof Error ? err.message : "Failed to re-analyze spectrum";
+            const errorMessage = err instanceof Error ? translateMessage(err.message) : t("translation.download.failedReAnalyzeSpectrum");
             logger.error(`Spectrum re-analysis error: ${errorMessage}`);
             setSpectrumProgress({
                 percent: 0,
-                message: "Spectrum analysis failed",
+                message: t("translation.download.spectrumAnalysisFailed2"),
             });
-            toast.error("Spectrum Analysis Failed", {
+            toast.error(t("translation.download.spectrumAnalysisFailed"), {
                 description: errorMessage,
             });
             return null;

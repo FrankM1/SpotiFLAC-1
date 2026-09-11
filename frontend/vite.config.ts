@@ -8,6 +8,9 @@ const wailsJson = JSON.parse(fs.readFileSync(wailsJsonPath, "utf-8"));
 const appVersion = wailsJson.info.productVersion;
 export default defineConfig({
     plugins: [react(), tailwindcss()],
+    build: {
+        target: "safari15",
+    },
     resolve: {
         alias: {
             "@": path.resolve(__dirname, "./src"),

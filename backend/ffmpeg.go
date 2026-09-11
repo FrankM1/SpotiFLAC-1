@@ -3,10 +3,12 @@ package backend
 import (
 	"archive/tar"
 	"archive/zip"
+	"encoding/json"
 
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -133,6 +135,18 @@ func appendExecutableCandidate(candidates []executableCandidate, seen map[string
 	})
 }
 
+func buildExecutableCandidates(localPath, localSource, systemPath string) []executableCandidate {
+	candidates := make([]executableCandidate, 0, 2)
+	seen := make(map[string]struct{}, 2)
+	if localSource != "" {
+		candidates = appendExecutableCandidate(candidates, seen, localPath, localSource)
+	}
+	if systemPath != "" {
+		candidates = appendExecutableCandidate(candidates, seen, systemPath, "system")
+	}
+	return candidates
+}
+
 func resolveSystemExecutable(executableName string) string {
 	if runtime.GOOS == "darwin" {
 		candidates := []string{
@@ -224,26 +238,22 @@ func resolveExecutablePath(executableName string) (string, string, error) {
 	nextDir := filepath.Join(filepath.Dir(ffmpegDir), ".spotiflac-next")
 	nextPath := filepath.Join(nextDir, executableName)
 	localExists := false
-	candidates := make([]executableCandidate, 0, 3)
-	seen := make(map[string]struct{}, 3)
-
-	if systemPath := resolveSystemExecutable(executableName); systemPath != "" {
-		candidates = appendExecutableCandidate(candidates, seen, systemPath, "system")
-	}
+	localSource := ""
 
 	if _, err := os.Stat(localPath); err == nil {
 		localExists = true
-		candidates = appendExecutableCandidate(candidates, seen, localPath, "local")
+		localSource = "local"
 	}
 
 	if !localExists {
 		if _, err := os.Stat(nextPath); err == nil {
 			if copyErr := copyExecutable(nextPath, localPath); copyErr == nil {
 				fmt.Printf("[FFmpeg] Copied %s from SpotiFLAC-Next folder\n", executableName)
-				candidates = appendExecutableCandidate(candidates, seen, localPath, "migrated")
+				localSource = "migrated"
 			}
 		}
 	}
+	candidates := buildExecutableCandidates(localPath, localSource, resolveSystemExecutable(executableName))
 
 	var lastErr error
 	for _, candidate := range candidates {
@@ -374,37 +384,101 @@ func InstallFFmpegWithBrew(progressCallback func(int, string)) error {
 	return nil
 }
 
-const ffmpegReleaseBaseURL = "https://github.com/spotbye/Dependencies/releases/download/FFmpeg-8.1"
+const (
+	ffmpegReleasesAPIURL     = "https://api.github.com/repos/spotbye/Dependencies/releases"
+	ffmpegReleaseDownloadURL = "https://github.com/spotbye/Dependencies/releases/download"
+	ffmpegReleaseTagPrefix   = "FFmpeg-"
+)
 
-func buildFFmpegReleaseURL(assetName string) string {
-	return ffmpegReleaseBaseURL + "/" + assetName
+type githubRelease struct {
+	TagName    string `json:"tag_name"`
+	Draft      bool   `json:"draft"`
+	Prerelease bool   `json:"prerelease"`
+}
+
+func getLatestFFmpegReleaseTag() (string, error) {
+	client := &http.Client{Timeout: 15 * time.Second}
+
+	for page := 1; ; page++ {
+		apiURL := fmt.Sprintf("%s?per_page=100&page=%d", ffmpegReleasesAPIURL, page)
+		req, err := http.NewRequest(http.MethodGet, apiURL, nil)
+		if err != nil {
+			return "", fmt.Errorf("failed to create GitHub releases request: %w", err)
+		}
+		req.Header.Set("Accept", "application/vnd.github+json")
+		req.Header.Set("User-Agent", "SpotiFLAC")
+		req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return "", fmt.Errorf("failed to fetch GitHub releases: %w", err)
+		}
+
+		var releases []githubRelease
+		decodeErr := json.NewDecoder(io.LimitReader(resp.Body, 2<<20)).Decode(&releases)
+		closeErr := resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return "", fmt.Errorf("GitHub releases API returned %s", resp.Status)
+		}
+		if decodeErr != nil {
+			return "", fmt.Errorf("failed to decode GitHub releases: %w", decodeErr)
+		}
+		if closeErr != nil {
+			return "", fmt.Errorf("failed to close GitHub releases response: %w", closeErr)
+		}
+
+		for _, release := range releases {
+			if !release.Draft && !release.Prerelease && strings.HasPrefix(release.TagName, ffmpegReleaseTagPrefix) {
+				return release.TagName, nil
+			}
+		}
+
+		if len(releases) < 100 {
+			break
+		}
+	}
+
+	return "", fmt.Errorf("no stable GitHub release found with tag prefix %q", ffmpegReleaseTagPrefix)
+}
+
+func buildFFmpegReleaseURL(tagName, assetName string) string {
+	return ffmpegReleaseDownloadURL + "/" + url.PathEscape(tagName) + "/" + url.PathEscape(assetName)
 }
 
 func getFFmpegDownloadURLs() ([]string, []string, error) {
+	var ffmpegAssetName, ffprobeAssetName string
+
 	switch runtime.GOOS {
 	case "windows":
-		return []string{buildFFmpegReleaseURL("ffmpeg-windows.zip")}, []string{buildFFmpegReleaseURL("ffprobe-windows.zip")}, nil
+		ffmpegAssetName, ffprobeAssetName = "ffmpeg-windows.zip", "ffprobe-windows.zip"
 	case "linux":
 		switch runtime.GOARCH {
 		case "amd64":
-			return []string{buildFFmpegReleaseURL("ffmpeg-linux-amd64.zip")}, []string{buildFFmpegReleaseURL("ffprobe-linux-amd64.zip")}, nil
+			ffmpegAssetName, ffprobeAssetName = "ffmpeg-linux-amd64.zip", "ffprobe-linux-amd64.zip"
 		case "arm64":
-			return []string{buildFFmpegReleaseURL("ffmpeg-linux-arm64v8.zip")}, []string{buildFFmpegReleaseURL("ffprobe-linux-arm64v8.zip")}, nil
+			ffmpegAssetName, ffprobeAssetName = "ffmpeg-linux-arm64v8.zip", "ffprobe-linux-arm64v8.zip"
 		default:
 			return nil, nil, fmt.Errorf("unsupported Linux architecture: %s", runtime.GOARCH)
 		}
 	case "darwin":
 		switch runtime.GOARCH {
 		case "amd64":
-			return []string{buildFFmpegReleaseURL("ffmpeg-macos-amd64.zip")}, []string{buildFFmpegReleaseURL("ffprobe-macos-amd64.zip")}, nil
+			ffmpegAssetName, ffprobeAssetName = "ffmpeg-macos-amd64.zip", "ffprobe-macos-amd64.zip"
 		case "arm64":
-			return []string{buildFFmpegReleaseURL("ffmpeg-macos-arm64.zip")}, []string{buildFFmpegReleaseURL("ffprobe-macos-arm64.zip")}, nil
+			ffmpegAssetName, ffprobeAssetName = "ffmpeg-macos-arm64.zip", "ffprobe-macos-arm64.zip"
 		default:
 			return nil, nil, fmt.Errorf("unsupported macOS architecture: %s", runtime.GOARCH)
 		}
 	default:
 		return nil, nil, fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
 	}
+
+	tagName, err := getLatestFFmpegReleaseTag()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return []string{buildFFmpegReleaseURL(tagName, ffmpegAssetName)}, []string{buildFFmpegReleaseURL(tagName, ffprobeAssetName)}, nil
 }
 
 func DownloadFFmpeg(progressCallback func(int)) error {
@@ -753,6 +827,94 @@ type ConvertAudioResult struct {
 	Error      string `json:"error,omitempty"`
 }
 
+func ConvertDownloadedFile(inputFile, outputFormat, bitrate, codec string, deleteOriginal bool) (string, error) {
+	ffmpegPath, err := GetFFmpegPath()
+	if err != nil {
+		return "", fmt.Errorf("failed to get ffmpeg path: %w", err)
+	}
+	if err := ValidateExecutable(ffmpegPath); err != nil {
+		return "", fmt.Errorf("invalid ffmpeg executable: %w", err)
+	}
+
+	inputFile = norm.NFC.String(inputFile)
+	outputFormat = strings.ToLower(strings.TrimSpace(outputFormat))
+	inputExt := strings.ToLower(filepath.Ext(inputFile))
+	outputExt := "." + outputFormat
+	base := strings.TrimSuffix(filepath.Base(inputFile), inputExt)
+	finalOutput := norm.NFC.String(filepath.Join(filepath.Dir(inputFile), base+outputExt))
+	actualOutput := finalOutput
+	if strings.EqualFold(inputExt, outputExt) {
+		actualOutput = filepath.Join(filepath.Dir(inputFile), base+".autoconvert"+outputExt)
+	}
+
+	args := []string{"-i", inputFile, "-map_metadata", "-1", "-map_chapters", "-1", "-y"}
+	switch outputFormat {
+	case "mp3":
+		args = append(args, "-codec:a", "libmp3lame", "-b:a", bitrate, "-map", "0:a", "-id3v2_version", "3")
+	case "m4a":
+		if codec == "alac" {
+			args = append(args, "-codec:a", "alac", "-map", "0:a")
+		} else {
+			args = append(args, "-codec:a", "aac", "-b:a", bitrate, "-map", "0:a")
+		}
+	case "wav", "aiff":
+		pcm := "pcm_s16le"
+		if outputFormat == "aiff" {
+			pcm = "pcm_s16be"
+		}
+		if sampleFmt, _ := pcmSampleFormatForInput(inputFile); sampleFmt == "s32" {
+			if outputFormat == "aiff" {
+				pcm = "pcm_s24be"
+			} else {
+				pcm = "pcm_s24le"
+			}
+		}
+		args = append(args, "-codec:a", pcm, "-map", "0:a")
+	case "opus":
+		args = append(args, "-codec:a", "libopus", "-b:a", bitrate, "-map", "0:a")
+	default:
+		return "", fmt.Errorf("unsupported output format: %s", outputFormat)
+	}
+	args = append(args, actualOutput)
+	cmd := exec.CommandContext(ActiveDownloadContext(), ffmpegPath, args...)
+	setHideWindow(cmd)
+	if output, runErr := cmd.CombinedOutput(); runErr != nil {
+		_ = os.Remove(actualOutput)
+		return "", fmt.Errorf("conversion failed: %v - %s", runErr, output)
+	}
+
+	metadata, _ := ExtractFullMetadataFromFile(inputFile)
+	cover, _ := ExtractCoverArt(inputFile)
+	if cover != "" {
+		defer os.Remove(cover)
+	}
+	lyrics, _ := ExtractLyrics(inputFile)
+	metadata.Lyrics = lyrics
+	if err := EmbedMetadataToConvertedFile(actualOutput, metadata, cover); err != nil {
+		fmt.Printf("[Auto Convert] Warning: metadata: %v\n", err)
+	}
+	if lyrics != "" {
+		_ = EmbedLyricsOnlyUniversal(actualOutput, lyrics)
+	}
+
+	if strings.EqualFold(inputExt, outputExt) {
+		backup := filepath.Join(filepath.Dir(inputFile), base+".autoconvert-backup"+inputExt)
+		_ = os.Remove(backup)
+		if err := os.Rename(inputFile, backup); err != nil {
+			_ = os.Remove(actualOutput)
+			return "", err
+		}
+		if err := os.Rename(actualOutput, finalOutput); err != nil {
+			_ = os.Rename(backup, finalOutput)
+			return "", err
+		}
+		_ = os.Remove(backup)
+	} else if deleteOriginal {
+		_ = os.Remove(inputFile)
+	}
+	return finalOutput, nil
+}
+
 func ConvertAudio(req ConvertAudioRequest) ([]ConvertAudioResult, error) {
 	ffmpegPath, err := GetFFmpegPath()
 	if err != nil {
@@ -772,10 +934,16 @@ func ConvertAudio(req ConvertAudioRequest) ([]ConvertAudioResult, error) {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 
+	maxWorkers := min(runtime.NumCPU(), 8)
+	sem := make(chan struct{}, maxWorkers)
+
 	for i, inputFile := range req.InputFiles {
 		wg.Add(1)
 		go func(idx int, inputFile string) {
 			defer wg.Done()
+
+			sem <- struct{}{}
+			defer func() { <-sem }()
 
 			result := ConvertAudioResult{
 				InputFile: inputFile,

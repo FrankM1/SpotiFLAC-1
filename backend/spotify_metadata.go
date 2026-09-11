@@ -407,7 +407,8 @@ func (c *SpotifyMetadataClient) getRawSpotifyData(ctx context.Context, parsed sp
 func (c *SpotifyMetadataClient) processSpotifyData(ctx context.Context, raw interface{}, callback MetadataCallback) (interface{}, error) {
 	switch payload := raw.(type) {
 	case *apiPlaylistResponse:
-		return c.formatPlaylistData(payload, callback), nil
+
+		return c.formatPlaylistData(payload, nil), nil
 	case *apiAlbumResponse:
 		return c.formatAlbumData(payload, callback)
 	case *apiTrackResponse:
@@ -444,6 +445,7 @@ func (c *SpotifyMetadataClient) fetchTrack(ctx context.Context, trackID string) 
 	}
 
 	var albumFetchData map[string]interface{}
+	var albumTrackArtistIDs []string
 	if trackData, ok := data["data"].(map[string]interface{}); ok {
 		if trackUnion, ok := trackData["trackUnion"].(map[string]interface{}); ok {
 			if albumOfTrack, ok := trackUnion["albumOfTrack"].(map[string]interface{}); ok {
@@ -463,6 +465,18 @@ func (c *SpotifyMetadataClient) fetchTrack(ctx context.Context, trackID string) 
 
 					albumResponse, err := c.fetchAlbumWithClient(ctx, client, albumID, nil)
 					if err == nil && albumResponse != nil {
+						for _, track := range albumResponse.Tracks {
+							if track.ID != trackID {
+								continue
+							}
+							for _, artistID := range track.ArtistIds {
+								artistID = strings.TrimSpace(artistID)
+								if artistID != "" {
+									albumTrackArtistIDs = append(albumTrackArtistIDs, artistID)
+								}
+							}
+							break
+						}
 
 						albumJSON, _ := json.Marshal(albumResponse)
 						var albumMap map[string]interface{}
@@ -507,6 +521,9 @@ func (c *SpotifyMetadataClient) fetchTrack(ctx context.Context, trackID string) 
 	}
 
 	filteredData := FilterTrack(data, c.Separator, albumFetchData)
+	if artistIDs, ok := filteredData["artistIds"].([]string); (!ok || len(artistIDs) == 0) && len(albumTrackArtistIDs) > 0 {
+		filteredData["artistIds"] = albumTrackArtistIDs
+	}
 	composer, composerErr := c.fetchTrackComposerWithClient(ctx, client, trackID)
 	if composerErr == nil && composer != "" {
 		filteredData["composer"] = composer
@@ -775,6 +792,7 @@ func (c *SpotifyMetadataClient) fetchPlaylist(ctx context.Context, playlistID st
 				var result apiPlaylistResponse
 				if json.Unmarshal(jsonData, &result) == nil {
 					formatted := c.formatPlaylistData(&result, nil)
+					formatted.TrackList = []AlbumTrackMetadata{}
 					callback(formatted)
 				}
 			}
@@ -789,6 +807,19 @@ func (c *SpotifyMetadataClient) fetchPlaylist(ctx context.Context, playlistID st
 		}
 
 		allItems = append(allItems, items...)
+
+		if callback != nil {
+
+			filtered := FilterPlaylist(response, c.Separator)
+			jsonData, _ := json.Marshal(filtered)
+			var pageResult apiPlaylistResponse
+			if err := json.Unmarshal(jsonData, &pageResult); err == nil {
+				formattedPage := c.formatPlaylistData(&pageResult, nil)
+				if len(formattedPage.TrackList) > 0 {
+					callback(formattedPage.TrackList)
+				}
+			}
+		}
 
 		if totalCount == nil {
 			if tc, ok := content["totalCount"].(float64); ok {
@@ -1449,7 +1480,7 @@ func parseSpotifyURI(input string) (spotifyURI, error) {
 		if len(parts) == 3 {
 			switch parts[1] {
 			case "album", "track", "playlist", "artist":
-				return spotifyURI{Type: parts[1], ID: parts[2]}, nil
+				return spotifyURI{Type: parts[1], ID: cleanSpotifyID(parts[2])}, nil
 			}
 		}
 	}
@@ -1484,7 +1515,7 @@ func parseSpotifyURI(input string) (spotifyURI, error) {
 	if len(parts) == 2 {
 		switch parts[0] {
 		case "album", "track", "playlist", "artist":
-			return spotifyURI{Type: parts[0], ID: parts[1]}, nil
+			return spotifyURI{Type: parts[0], ID: cleanSpotifyID(parts[1])}, nil
 		}
 	}
 
@@ -1497,12 +1528,16 @@ func parseSpotifyURI(input string) (spotifyURI, error) {
 					discType = candidate
 				}
 			}
-			return spotifyURI{Type: "artist_discography", ID: parts[1], DiscographyGroup: discType}, nil
+			return spotifyURI{Type: "artist_discography", ID: cleanSpotifyID(parts[1]), DiscographyGroup: discType}, nil
 		}
-		return spotifyURI{Type: "artist", ID: parts[1]}, nil
+		return spotifyURI{Type: "artist", ID: cleanSpotifyID(parts[1])}, nil
 	}
 
 	return spotifyURI{}, errInvalidSpotifyURL
+}
+
+func cleanSpotifyID(value string) string {
+	return strings.TrimRight(strings.TrimSpace(value), ",.;:!?)]}>'\"")
 }
 
 func cleanPathParts(path string) []string {

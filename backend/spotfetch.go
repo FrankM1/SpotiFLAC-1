@@ -30,6 +30,7 @@ var spotifyAccessTokenCache = struct {
 
 type SpotifyClient struct {
 	client        *http.Client
+	mu            sync.Mutex
 	accessToken   string
 	clientToken   string
 	clientID      string
@@ -289,7 +290,7 @@ func (c *SpotifyClient) getClientToken() error {
 	return nil
 }
 
-func (c *SpotifyClient) Initialize() error {
+func (c *SpotifyClient) initializeLocked() error {
 	if err := c.getSessionInfo(); err != nil {
 		return err
 	}
@@ -299,27 +300,40 @@ func (c *SpotifyClient) Initialize() error {
 	return c.getClientToken()
 }
 
+func (c *SpotifyClient) Initialize() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return c.initializeLocked()
+}
+
 func (c *SpotifyClient) Query(payload map[string]interface{}) (map[string]interface{}, error) {
+	c.mu.Lock()
 	if c.accessToken == "" || c.clientToken == "" {
-		if err := c.Initialize(); err != nil {
+		if err := c.initializeLocked(); err != nil {
+			c.mu.Unlock()
 			return nil, err
 		}
 	}
+	accessToken := c.accessToken
+	clientToken := c.clientToken
+	clientVersion := c.clientVersion
+	c.mu.Unlock()
 
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
 	}
 
-	doRequest := func() (int, []byte, error) {
+	doRequest := func(accessToken, clientToken, clientVersion string) (int, []byte, error) {
 		req, reqErr := http.NewRequest("POST", "https://api-partner.spotify.com/pathfinder/v2/query", bytes.NewBuffer(jsonData))
 		if reqErr != nil {
 			return 0, nil, reqErr
 		}
 
-		req.Header.Set("Authorization", "Bearer "+c.accessToken)
-		req.Header.Set("Client-Token", c.clientToken)
-		req.Header.Set("Spotify-App-Version", c.clientVersion)
+		req.Header.Set("Authorization", "Bearer "+accessToken)
+		req.Header.Set("Client-Token", clientToken)
+		req.Header.Set("Spotify-App-Version", clientVersion)
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36")
 
@@ -336,19 +350,28 @@ func (c *SpotifyClient) Query(payload map[string]interface{}) (map[string]interf
 		return resp.StatusCode, respBody, nil
 	}
 
-	statusCode, body, err := doRequest()
+	statusCode, body, err := doRequest(accessToken, clientToken, clientVersion)
 	if err != nil {
 		return nil, err
 	}
 
 	if statusCode == http.StatusUnauthorized || statusCode == http.StatusForbidden {
-		invalidateSpotifyAccessTokenCache()
-		c.accessToken = ""
-		c.clientToken = ""
-		if err := c.Initialize(); err != nil {
-			return nil, err
+		c.mu.Lock()
+		if c.accessToken == accessToken && c.clientToken == clientToken {
+			invalidateSpotifyAccessTokenCache()
+			c.accessToken = ""
+			c.clientToken = ""
+			if err := c.initializeLocked(); err != nil {
+				c.mu.Unlock()
+				return nil, err
+			}
 		}
-		statusCode, body, err = doRequest()
+		accessToken = c.accessToken
+		clientToken = c.clientToken
+		clientVersion = c.clientVersion
+		c.mu.Unlock()
+
+		statusCode, body, err = doRequest(accessToken, clientToken, clientVersion)
 		if err != nil {
 			return nil, err
 		}
@@ -415,6 +438,18 @@ func getBool(m map[string]interface{}, key string) bool {
 	return false
 }
 
+func spotifyIDFromItem(item map[string]interface{}) string {
+	if id := strings.TrimSpace(getString(item, "id")); id != "" {
+		return id
+	}
+
+	uri := strings.TrimSpace(getString(item, "uri"))
+	if separator := strings.LastIndex(uri, ":"); separator >= 0 && separator < len(uri)-1 {
+		return strings.TrimSpace(uri[separator+1:])
+	}
+	return ""
+}
+
 func extractArtists(artistsData map[string]interface{}) []map[string]interface{} {
 	items := getSlice(artistsData, "items")
 
@@ -427,6 +462,9 @@ func extractArtists(artistsData map[string]interface{}) []map[string]interface{}
 		profile := getMap(itemMap, "profile")
 		artistInfo := map[string]interface{}{
 			"name": getString(profile, "name"),
+		}
+		if id := spotifyIDFromItem(itemMap); id != "" {
+			artistInfo["id"] = id
 		}
 		artists = append(artists, artistInfo)
 	}
@@ -589,40 +627,8 @@ func FilterTrack(data map[string]interface{}, separator string, albumFetchData .
 	artists := extractArtists(getMap(trackData, "artists"))
 
 	if len(artists) == 0 {
-		artists = []map[string]interface{}{}
-		firstArtistItems := getSlice(getMap(trackData, "firstArtist"), "items")
-		for _, item := range firstArtistItems {
-			itemMap, ok := item.(map[string]interface{})
-			if !ok {
-				continue
-			}
-			if profile, exists := itemMap["profile"]; exists {
-				profileMap, ok := profile.(map[string]interface{})
-				if ok {
-					artistInfo := map[string]interface{}{
-						"name": getString(profileMap, "name"),
-					}
-					artists = append(artists, artistInfo)
-				}
-			}
-		}
-
-		otherArtistItems := getSlice(getMap(trackData, "otherArtists"), "items")
-		for _, item := range otherArtistItems {
-			itemMap, ok := item.(map[string]interface{})
-			if !ok {
-				continue
-			}
-			if profile, exists := itemMap["profile"]; exists {
-				profileMap, ok := profile.(map[string]interface{})
-				if ok {
-					artistInfo := map[string]interface{}{
-						"name": getString(profileMap, "name"),
-					}
-					artists = append(artists, artistInfo)
-				}
-			}
-		}
+		artists = extractArtists(getMap(trackData, "firstArtist"))
+		artists = append(artists, extractArtists(getMap(trackData, "otherArtists"))...)
 	}
 
 	if len(artists) == 0 {
@@ -801,8 +807,18 @@ func FilterTrack(data map[string]interface{}, separator string, albumFetchData .
 	durationString := getString(durationObj, "formatted")
 
 	artistNames := []string{}
+	artistIDs := []string{}
+	seenArtistIDs := make(map[string]struct{})
 	for _, artist := range artists {
 		artistNames = append(artistNames, getString(artist, "name"))
+		artistID := strings.TrimSpace(getString(artist, "id"))
+		if artistID == "" {
+			continue
+		}
+		if _, exists := seenArtistIDs[artistID]; !exists {
+			seenArtistIDs[artistID] = struct{}{}
+			artistIDs = append(artistIDs, artistID)
+		}
 	}
 	artistsString := strings.Join(artistNames, separator)
 
@@ -877,6 +893,7 @@ func FilterTrack(data map[string]interface{}, separator string, albumFetchData .
 		"id":          getString(trackData, "id"),
 		"name":        getString(trackData, "name"),
 		"artists":     artistsString,
+		"artistIds":   artistIDs,
 		"album":       albumInfo,
 		"duration":    durationString,
 		"track":       int(getFloat64(trackData, "trackNumber")),
@@ -1261,7 +1278,7 @@ func FilterPlaylist(data map[string]interface{}, separator string) map[string]in
 	filtered := map[string]interface{}{
 		"id":          playlistID,
 		"name":        getString(playlistData, "name"),
-		"description": getString(playlistData, "description"),
+		"description": html.UnescapeString(getString(playlistData, "description")),
 		"owner":       ownerInfo,
 		"cover":       cover,
 		"count":       count,

@@ -1,18 +1,18 @@
+import { t } from "@/i18n";
 import { useEffect, useState } from "react";
 import { openExternal } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, } from "@/components/ui/card";
 import { Star, GitFork, Clock, Download, Info } from "lucide-react";
 import AudioTTSProIcon from "@/assets/audiotts-pro.webp";
-import ChatGPTTTSIcon from "@/assets/chatgpt-tts.webp";
 import XIcon from "@/assets/x.webp";
 import SpotubeDLIcon from "@/assets/icons/spotubedl.svg";
 import XBatchDLIcon from "@/assets/icons/xbatchdl.svg";
 import SpotiFLACNextIcon from "@/assets/icons/next.svg";
 import { langColors } from "@/assets/github-lang-colors";
+import { formatRelativeTime } from "@/lib/relative-time";
 const browserExtensionItems = [
-    { icon: AudioTTSProIcon, label: "AudioTTS Pro", alt: "AudioTTS Pro" },
-    { icon: ChatGPTTTSIcon, label: "ChatGPT TTS", alt: "ChatGPT TTS" },
     { icon: XIcon, label: "Twitter/X Media Batch Downloader", alt: "Twitter/X Media Batch Downloader" },
+    { icon: AudioTTSProIcon, label: "AudioTTS Pro", alt: "AudioTTS Pro" },
 ];
 const projectCardClass = "cursor-pointer gap-3 py-5 transition-colors hover:bg-muted/50 dark:hover:bg-accent/50";
 const projectCardHeaderClass = "px-5 gap-1.5";
@@ -114,50 +114,22 @@ export function OtherProjects() {
         const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
         const diffMonths = Math.floor(diffDays / 30);
         if (diffDays === 0)
-            return "today";
-        if (diffDays === 1)
-            return "1d";
+            return t("translation.time.justNow");
         if (diffDays < 30)
-            return `${diffDays}d`;
-        if (diffMonths === 1)
-            return "1mo";
+            return t("translation.time.day", { count: diffDays });
         if (diffMonths < 12)
-            return `${diffMonths}mo`;
+            return t("translation.time.month", { count: diffMonths });
         const diffYears = Math.floor(diffMonths / 12);
-        return `${diffYears}y`;
+        return t("translation.time.year", { count: diffYears });
     };
     const formatReleaseTimeAgo = (dateString: string): string => {
         if (!dateString) {
             return "";
         }
-        const now = Date.now();
-        const releasedAt = new Date(dateString).getTime();
-        if (Number.isNaN(releasedAt)) {
+        if (Number.isNaN(new Date(dateString).getTime())) {
             return "";
         }
-        const diffMs = Math.max(0, now - releasedAt);
-        const totalMinutes = Math.floor(diffMs / (1000 * 60));
-        const totalHours = Math.floor(totalMinutes / 60);
-        const totalDays = Math.floor(totalHours / 24);
-        const totalMonths = Math.floor(totalDays / 30);
-        const totalYears = Math.floor(totalMonths / 12);
-        if (totalYears > 0) {
-            const remainingMonths = totalMonths % 12;
-            return remainingMonths > 0 ? `${totalYears}y ${remainingMonths}m ago` : `${totalYears}y ago`;
-        }
-        if (totalMonths > 0) {
-            const remainingDays = totalDays % 30;
-            return remainingDays > 0 ? `${totalMonths}m ${remainingDays}d ago` : `${totalMonths}m ago`;
-        }
-        if (totalDays > 0) {
-            const remainingHours = totalHours % 24;
-            return remainingHours > 0 ? `${totalDays}d ${remainingHours}h ago` : `${totalDays}d ago`;
-        }
-        if (totalHours > 0) {
-            const remainingMinutes = totalMinutes % 60;
-            return `${totalHours}h ${remainingMinutes}m ago`;
-        }
-        return `${totalMinutes}m ago`;
+        return formatRelativeTime(dateString);
     };
     const formatNumber = (num: number): string => {
         if (num >= 1000) {
@@ -173,7 +145,7 @@ export function OtherProjects() {
     };
     return (<div className="flex flex-col space-y-3">
       <div className="flex items-center justify-between shrink-0">
-        <h2 className="text-2xl font-bold tracking-tight">Other Projects</h2>
+        <h2 className="text-2xl font-bold tracking-tight">{t("translation.migrated.OtherProjects.otherProjects")}</h2>
       </div>
 
       <div className="flex-1 min-h-0 pr-1.5">
@@ -181,7 +153,7 @@ export function OtherProjects() {
               <Card className={projectCardClass} onClick={() => openExternal("https://github.com/spotbye/SpotiFLAC-Next")}>
                 <CardHeader className={projectCardHeaderClass}>
                   <div className="flex justify-between items-start mb-2">
-                    <img src={SpotiFLACNextIcon} className="h-6 w-6 shrink-0" alt="SpotiFLAC Next"/>
+                    <img src={SpotiFLACNextIcon} className="h-6 w-6 shrink-0" alt={t("literal.header.spotiflacNext")}/>
                     <div className="ml-3 flex flex-wrap items-center justify-end gap-2">
                       {repoStats["SpotiFLAC-Next"]?.latestReleaseAt && (<span className={releaseMetaClass}>
                           {formatReleaseTimeAgo(repoStats["SpotiFLAC-Next"].latestReleaseAt)}
@@ -192,7 +164,7 @@ export function OtherProjects() {
                     </div>
                   </div>
                   <CardTitle className="leading-tight">
-                    SpotiFLAC Next
+                    {t("literal.header.spotiflacNext")}
                   </CardTitle>
                   <CardDescription className={projectBodyClass}>
                     {getRepoDescription("SpotiFLAC-Next")}
@@ -224,10 +196,10 @@ export function OtherProjects() {
                     <div className="rounded-md border border-sky-500/25 bg-sky-500/8 px-3 py-2">
                       <div className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-sky-700 dark:text-sky-300">
                         <Info className="h-3.5 w-3.5"/>
-                        Note
+                        {t("translation.migrated.OtherProjects.note")}
                       </div>
                       <p className="text-xs leading-snug text-sky-700 dark:text-sky-300">
-                        This project released as a token of appreciation for those who have supported SpotiFLAC through Ko-fi, Patreon, or crypto. It’s not a paid product, but it’s shared privately through a supporter-only post.
+                        {t("translation.migrated.OtherProjects.thisProjectIsSharedAsAThank")}
                       </p>
                     </div>
                   </CardContent>)}
@@ -235,7 +207,7 @@ export function OtherProjects() {
               <Card className={projectCardClass} onClick={() => openExternal("https://github.com/afkarxyz/Twitter-X-Media-Batch-Downloader")}>
                 <CardHeader className={projectCardHeaderClass}>
                   <div className="flex justify-between items-start mb-2">
-                    <img src={XBatchDLIcon} className="h-6 w-6 shrink-0" alt="Twitter/X Media Batch Downloader"/>
+                    <img src={XBatchDLIcon} className="h-6 w-6 shrink-0" alt={t("translation.migrated.OtherProjects.twitterXMediaBatchDownloader")}/>
                     <div className="ml-3 flex flex-wrap items-center justify-end gap-2">
                       {repoStats["Twitter-X-Media-Batch-Downloader"]?.latestReleaseAt && (<span className={releaseMetaClass}>
                           {formatReleaseTimeAgo(repoStats["Twitter-X-Media-Batch-Downloader"].latestReleaseAt)}
@@ -246,7 +218,7 @@ export function OtherProjects() {
                     </div>
                   </div>
                   <CardTitle className="leading-tight">
-                    Twitter/X Media Batch Downloader
+                    {t("translation.migrated.OtherProjects.twitterXMediaBatchDownloader")}
                   </CardTitle>
                   <CardDescription className={projectBodyClass}>
                     {getRepoDescription("Twitter-X-Media-Batch-Downloader")}
@@ -278,12 +250,12 @@ export function OtherProjects() {
                     </div>
                     <div className="flex flex-col gap-1 text-xs text-muted-foreground items-start">
                       <span className="flex items-center gap-1">
-                        <Download className="h-3.5 w-3.5"/> TOTAL:{" "}
+                        <Download className="h-3.5 w-3.5"/> {t("translation.migrated.OtherProjects.total")}{" "}
                         {formatNumber(repoStats["Twitter-X-Media-Batch-Downloader"]
                 .totalDownloads)}
                       </span>
                       <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
-                        <Download className="h-3.5 w-3.5"/> LATEST:{" "}
+                        <Download className="h-3.5 w-3.5"/> {t("translation.migrated.OtherProjects.latest")}{" "}
                         {formatNumber(repoStats["Twitter-X-Media-Batch-Downloader"]
                 .latestDownloads)}
                       </span>
@@ -293,7 +265,7 @@ export function OtherProjects() {
               <div className="flex h-full flex-col gap-1.5">
                 <Card className={`${projectCardClass} flex-1`} onClick={() => openExternal("https://exyezed.fyi/")}>
                     <CardHeader className={projectCardHeaderClass}>
-                    <CardTitle className="leading-tight">Browser Extensions & Scripts</CardTitle>
+                    <CardTitle className="leading-tight">{t("translation.migrated.OtherProjects.browserExtensionsScripts")}</CardTitle>
                     <CardDescription className="flex flex-col gap-2.5 pt-1.5">
                       {browserExtensionItems.map((item) => (<div key={item.alt} className="flex items-center gap-2.5">
                           <img src={item.icon} className="h-5.5 w-5.5 rounded-sm shadow-sm" alt={item.alt}/>
@@ -307,11 +279,11 @@ export function OtherProjects() {
                 <Card className={`${projectCardClass} flex-1`} onClick={() => openExternal("https://spotubedl.com/")}>
                   <CardHeader className={projectCardHeaderClass}>
                     <CardTitle className="flex items-center gap-2 leading-tight">
-                      <img src={SpotubeDLIcon} className="h-5 w-5" alt="SpotubeDL"/>{" "}
-                      SpotubeDL.com
+                      <img src={SpotubeDLIcon} className="h-5 w-5" alt={t("translation.migrated.OtherProjects.spotubedl")}/>{" "}
+                      {t("translation.migrated.OtherProjects.spotubedlCom")}
                     </CardTitle>
                     <CardDescription className={projectBodyClass}>
-                      Download Spotify Tracks, Albums, Playlists & Discography as MP3/OGG/Opus.
+                      {t("translation.migrated.OtherProjects.downloadSpotifyTracksAlbumsPlaylistsDiscographyAs")}
                     </CardDescription>
                   </CardHeader>
                 </Card>

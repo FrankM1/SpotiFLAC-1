@@ -64,7 +64,7 @@ jobs:
       - name: Install frontend dependencies
         working-directory: frontend
         run: |
-          pnpm install
+          pnpm install --frozen-lockfile
           pnpm run generate-icon
 
       - name: Install UPX
@@ -141,7 +141,7 @@ jobs:
       - name: Install frontend dependencies
         working-directory: frontend
         run: |
-          pnpm install
+          pnpm install --frozen-lockfile
           pnpm run generate-icon
 
       - name: Build application
@@ -253,7 +253,7 @@ jobs:
       - name: Install frontend dependencies
         working-directory: frontend
         run: |
-          pnpm install
+          pnpm install --frozen-lockfile
           pnpm run generate-icon
 
       - name: Build application

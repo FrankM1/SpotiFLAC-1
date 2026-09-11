@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from "react";
 import type { SpectrumData } from "@/types/api";
 import { Label } from "@/components/ui/label";
@@ -448,11 +449,11 @@ const COLOR_SCHEMES: {
     label: string;
     gradient: string;
 }[] = [
-    { value: "spek", label: "Spek", gradient: "linear-gradient(to right, #0f0040, #1e0080, #4000ff, #8000ff, #ff0080, #ff4000, #ff8000, #ffff00)" },
-    { value: "viridis", label: "Viridis", gradient: "linear-gradient(to right, #440154, #31688e, #35b779, #fde725)" },
-    { value: "hot", label: "Hot", gradient: "linear-gradient(to right, #000000, #ff0000, #ffff00, #ffffff)" },
-    { value: "cool", label: "Cool", gradient: "linear-gradient(to right, #000080, #0000ff, #00ffff, #ffffff)" },
-    { value: "grayscale", label: "Grayscale", gradient: "linear-gradient(to right, #000000, #ffffff)" },
+    { value: "spek", label: t("literal.spectrumVisualization.spek"), gradient: "linear-gradient(to right, #0f0040, #1e0080, #4000ff, #8000ff, #ff0080, #ff4000, #ff8000, #ffff00)" },
+    { value: "viridis", label: t("literal.spectrumVisualization.viridis"), gradient: "linear-gradient(to right, #440154, #31688e, #35b779, #fde725)" },
+    { value: "hot", label: t("literal.spectrumVisualization.hot"), gradient: "linear-gradient(to right, #000000, #ff0000, #ffff00, #ffffff)" },
+    { value: "cool", label: t("literal.spectrumVisualization.cool"), gradient: "linear-gradient(to right, #000080, #0000ff, #00ffff, #ffffff)" },
+    { value: "grayscale", label: t("literal.spectrumVisualization.grayscale"), gradient: "linear-gradient(to right, #000000, #ffffff)" },
 ];
 export const SpectrumVisualization = forwardRef<SpectrumVisualizationHandle, SpectrumVisualizationProps>(({ sampleRate, duration, spectrumData, fileName, onReAnalyze, isAnalyzingSpectrum, spectrumProgress, }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -524,7 +525,7 @@ export const SpectrumVisualization = forwardRef<SpectrumVisualizationHandle, Spe
     return (<div className="space-y-4">
             <div className="flex flex-wrap items-center gap-3 sm:gap-4 p-1">
                 <div className="flex items-center gap-2">
-                    <Label className="whitespace-nowrap text-sm font-medium">Color Scheme:</Label>
+                    <Label className="whitespace-nowrap text-sm font-medium">{t("translation.spectrumVisualization.colorScheme")}</Label>
                     <Select value={colorScheme} onValueChange={(v) => setColorScheme(v as ColorScheme)} disabled={isAnalyzingSpectrum}>
                         <SelectTrigger className="h-8 w-[130px] text-sm">
                             <SelectValue />
@@ -543,20 +544,20 @@ export const SpectrumVisualization = forwardRef<SpectrumVisualizationHandle, Spe
                 <div className="h-6 w-px bg-border hidden sm:block mx-1"></div>
 
                 <div className="flex items-center gap-2">
-                    <Label className="whitespace-nowrap text-sm font-medium">Freq Scale:</Label>
+                    <Label className="whitespace-nowrap text-sm font-medium">{t("translation.spectrumVisualization.freqScale")}</Label>
                     <Select value={freqScale} onValueChange={(v) => setFreqScale(v as FreqScale)} disabled={isAnalyzingSpectrum}>
                         <SelectTrigger className="h-8 w-[95px] text-sm">
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="linear">Linear</SelectItem>
-                            <SelectItem value="log2">Log2</SelectItem>
+                            <SelectItem value="linear">{t("literal.spectrumVisualization.linear")}</SelectItem>
+                            <SelectItem value="log2">{t("literal.spectrumVisualization.log2")}</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
 
                 <div className="flex items-center gap-2">
-                    <Label className="whitespace-nowrap text-sm font-medium">FFT Size:</Label>
+                    <Label className="whitespace-nowrap text-sm font-medium">{t("translation.common.fftSize")}</Label>
                     <Select value={fftSize} onValueChange={(v) => handleReAnalyze(v, windowFunction)} disabled={isAnalyzingSpectrum}>
                         <SelectTrigger className="h-8 w-[90px] text-sm">
                             <SelectValue />
@@ -571,16 +572,16 @@ export const SpectrumVisualization = forwardRef<SpectrumVisualizationHandle, Spe
                 </div>
 
                 <div className="flex items-center gap-2">
-                    <Label className="whitespace-nowrap text-sm font-medium">Window:</Label>
+                    <Label className="whitespace-nowrap text-sm font-medium">{t("translation.spectrumVisualization.window")}</Label>
                     <Select value={windowFunction} onValueChange={(v) => handleReAnalyze(fftSize, v)} disabled={isAnalyzingSpectrum}>
                         <SelectTrigger className="h-8 w-[120px] text-sm capitalize">
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="hann">Hann</SelectItem>
-                            <SelectItem value="hamming">Hamming</SelectItem>
-                            <SelectItem value="blackman">Blackman</SelectItem>
-                            <SelectItem value="rectangular">Rectangular</SelectItem>
+                            <SelectItem value="hann">{t("literal.spectrumVisualization.hann")}</SelectItem>
+                            <SelectItem value="hamming">{t("literal.spectrumVisualization.hamming")}</SelectItem>
+                            <SelectItem value="blackman">{t("literal.spectrumVisualization.blackman")}</SelectItem>
+                            <SelectItem value="rectangular">{t("literal.spectrumVisualization.rectangular")}</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
@@ -590,7 +591,7 @@ export const SpectrumVisualization = forwardRef<SpectrumVisualizationHandle, Spe
                 {isAnalyzingSpectrum && (<div className="absolute inset-0 z-10 grid place-items-center bg-black/60 backdrop-blur-sm">
                         <div className="w-full max-w-xs space-y-2 px-4">
                             <div className="flex items-center justify-between text-sm text-foreground/90">
-                                <span>Processing...</span>
+                                <span>{t("translation.spectrumVisualization.processing")}</span>
                                 <span className="tabular-nums">{spectrumPercent}%</span>
                             </div>
                             <Progress value={spectrumPercent} className="h-2 w-full"/>

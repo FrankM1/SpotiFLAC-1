@@ -1,17 +1,18 @@
 import { useState, useCallback, useRef, useEffect, type ChangeEvent, type CSSProperties, type DragEvent } from "react";
+import { t, translateMessage } from "@/i18n";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Progress } from "@/components/ui/progress";
 import { Spinner } from "@/components/ui/spinner";
-import { Upload, ArrowLeft, Trash2, Download, FolderOpen, X, AlertCircle, CheckCircle2, FileMusic, ChevronDown, Play, StopCircle } from "lucide-react";
+import { Upload, ArrowLeft, Trash2, Download, FolderOpen, X, AlertCircle, CircleCheckBig, FileMusic, ChevronDown, Activity, StopCircle } from "lucide-react";
 import { AudioAnalysis } from "@/components/AudioAnalysis";
 import { SpectrumVisualization, createSpectrogramDataURL, type SpectrumVisualizationHandle } from "@/components/SpectrumVisualization";
 import { useAudioAnalysis } from "@/hooks/useAudioAnalysis";
 import type { AnalysisResult } from "@/types/api";
 import { loadAudioAnalysisPreferences } from "@/lib/audio-analysis-preferences";
 import { toastWithSound as toast } from "@/lib/toast-with-sound";
-import { GetFileSizes, ListAudioFilesInDir, SaveSpectrumImage, SelectAudioFiles, SelectFolder } from "../../wailsjs/go/main/App";
+import { GetFileSizes, ListAudioFilesInDir, SaveSpectrumImage, SelectFolder } from "../../wailsjs/go/main/App";
 import { OnFileDrop, OnFileDropOff } from "../../wailsjs/runtime/runtime";
 interface AudioAnalysisPageProps {
     onBack?: () => void;
@@ -34,6 +35,14 @@ interface QueueProgressState {
     total: number;
     fileName: string;
 }
+interface AudioAnalysisPageCache {
+    items: BatchAnalysisItem[];
+    activeItemId: string | null;
+}
+let audioAnalysisPageCache: AudioAnalysisPageCache = {
+    items: [],
+    activeItemId: null,
+};
 const EMPTY_PROGRESS_STATE: QueueProgressState = {
     completed: 0,
     total: 0,
@@ -118,12 +127,12 @@ function itemMetaLine(item: BatchAnalysisItem): string {
     }
     switch (item.status) {
         case "analyzing":
-            return "Analyzing audio quality...";
+            return t("translation.audioAnalysis.analyzingAudioQuality");
         case "error":
-            return item.error || "Analysis failed";
+            return translateMessage(item.error || t("translation.download.analysisFailed"));
         case "pending":
         default:
-            return "Waiting to be analyzed";
+            return t("translation.audioAnalysis.queued");
     }
 }
 function statusIcon(status: BatchItemStatus) {
@@ -131,7 +140,7 @@ function statusIcon(status: BatchItemStatus) {
         case "analyzing":
             return <Spinner className="h-4 w-4 text-primary"/>;
         case "success":
-            return <CheckCircle2 className="h-4 w-4 text-green-500"/>;
+            return <CircleCheckBig className="h-4 w-4 text-green-500"/>;
         case "error":
             return <AlertCircle className="h-4 w-4 text-destructive"/>;
         case "pending":
@@ -141,13 +150,12 @@ function statusIcon(status: BatchItemStatus) {
 }
 export function AudioAnalysisPage({ onBack }: AudioAnalysisPageProps) {
     const { analysisProgress, spectrumLoading, spectrumProgress, analyzeFile, analyzeFilePath, cancelAnalysis, loadStoredAnalysis, clearStoredAnalysis, reAnalyzeSpectrum, clearResult, } = useAudioAnalysis();
-    const [items, setItems] = useState<BatchAnalysisItem[]>([]);
-    const [activeItemId, setActiveItemId] = useState<string | null>(null);
+    const [items, setItems] = useState<BatchAnalysisItem[]>(() => audioAnalysisPageCache.items.map((item) => item.status === "analyzing" ? { ...item, status: "pending" } : item));
+    const [activeItemId, setActiveItemId] = useState<string | null>(() => audioAnalysisPageCache.activeItemId);
     const [isDragging, setIsDragging] = useState(false);
     const [isExportingSelected, setIsExportingSelected] = useState(false);
     const [isExportingBatch, setIsExportingBatch] = useState(false);
     const [isBatchRunning, setIsBatchRunning] = useState(false);
-    const [batchProgress, setBatchProgress] = useState<QueueProgressState>(EMPTY_PROGRESS_STATE);
     const [exportProgress, setExportProgress] = useState<QueueProgressState>(EMPTY_PROGRESS_STATE);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const spectrumRef = useRef<SpectrumVisualizationHandle>(null);
@@ -156,9 +164,11 @@ export function AudioAnalysisPage({ onBack }: AudioAnalysisPageProps) {
     const activeItemIdRef = useRef<string | null>(activeItemId);
     useEffect(() => {
         itemsRef.current = items;
+        audioAnalysisPageCache = { ...audioAnalysisPageCache, items };
     }, [items]);
     useEffect(() => {
         activeItemIdRef.current = activeItemId;
+        audioAnalysisPageCache = { ...audioAnalysisPageCache, activeItemId };
     }, [activeItemId]);
     const setActiveSelection = useCallback((nextId: string | null) => {
         activeItemIdRef.current = nextId;
@@ -170,9 +180,6 @@ export function AudioAnalysisPage({ onBack }: AudioAnalysisPageProps) {
     const isSingleMode = items.length === 1;
     const isBatchMode = items.length > 1;
     const canResumeBatch = isBatchMode && !isBatchRunning && pendingItems.length > 0;
-    const batchPercent = batchProgress.total > 0
-        ? Math.round(Math.max(0, Math.min(100, ((batchProgress.completed + (isBatchRunning ? analysisProgress.percent / 100 : 0)) / batchProgress.total) * 100)))
-        : 0;
     const exportPercent = exportProgress.total > 0
         ? Math.round(Math.max(0, Math.min(100, (exportProgress.completed / exportProgress.total) * 100)))
         : 0;
@@ -189,11 +196,6 @@ export function AudioAnalysisPage({ onBack }: AudioAnalysisPageProps) {
         const runId = batchRunIdRef.current + 1;
         batchRunIdRef.current = runId;
         setIsBatchRunning(true);
-        setBatchProgress({
-            completed: 0,
-            total: entries.length,
-            fileName: entries[0]?.name ?? "",
-        });
         let successCount = 0;
         let failCount = 0;
         try {
@@ -202,11 +204,7 @@ export function AudioAnalysisPage({ onBack }: AudioAnalysisPageProps) {
                     return;
                 }
                 const entry = entries[index];
-                setBatchProgress({
-                    completed: index,
-                    total: entries.length,
-                    fileName: entry.name,
-                });
+                setActiveSelection(entry.id);
                 setItems((prev) => prev.map((item) => item.id === entry.id
                     ? { ...item, status: "analyzing", error: undefined }
                     : item));
@@ -250,7 +248,7 @@ export function AudioAnalysisPage({ onBack }: AudioAnalysisPageProps) {
                         ? {
                             ...item,
                             status: "error",
-                            error: outcome.error || "Analysis failed",
+                            error: outcome.error || t("translation.download.analysisFailed"),
                         }
                         : item));
                     if (!activeItemIdRef.current) {
@@ -259,19 +257,14 @@ export function AudioAnalysisPage({ onBack }: AudioAnalysisPageProps) {
                 }
             }
             if (batchRunIdRef.current === runId) {
-                setBatchProgress({
-                    completed: entries.length,
-                    total: entries.length,
-                    fileName: "",
-                });
                 if (successCount > 0) {
-                    toast.success("Batch Analysis Complete", {
-                        description: `Successfully analyzed ${successCount} file(s)${failCount > 0 ? `, ${failCount} failed` : ""}`,
+                    toast.success(t("translation.analysis.batchComplete"), {
+                        description: t("translation.analysis.success", { count: successCount, failures: failCount > 0 ? t("translation.common.failures", { count: failCount }) : "" }),
                     });
                 }
                 else if (failCount > 0) {
-                    toast.error("Batch Analysis Failed", {
-                        description: `All ${failCount} file(s) failed to analyze`,
+                    toast.error(t("translation.analysis.batchFailed"), {
+                        description: t("translation.analysis.allFailed", { count: failCount }),
                     });
                 }
             }
@@ -286,8 +279,8 @@ export function AudioAnalysisPage({ onBack }: AudioAnalysisPageProps) {
         if (!isBatchRunning) {
             return true;
         }
-        toast.info("Analysis in progress", {
-            description: "Please wait for the current batch to finish or clear it first.",
+        toast.info(t("translation.audioAnalysis.analysisProgress"), {
+            description: t("translation.audioAnalysis.pleaseWaitCurrentBatchFinish"),
         });
         return false;
     }, [isBatchRunning]);
@@ -299,8 +292,8 @@ export function AudioAnalysisPage({ onBack }: AudioAnalysisPageProps) {
         const invalidCount = uniquePaths.filter((path) => !isSupportedAudioPath(path)).length;
         const validPaths = uniquePaths.filter(isSupportedAudioPath);
         if (invalidCount > 0) {
-            toast.error("Unsupported format", {
-                description: `Only ${SUPPORTED_AUDIO_LABEL} files can be analyzed.`,
+            toast.error(t("translation.common.unsupportedFormat"), {
+                description: t("translation.audioAnalysis.onlyValue1FilesCanBe", { value1: SUPPORTED_AUDIO_LABEL }),
             });
         }
         if (validPaths.length === 0) {
@@ -309,8 +302,8 @@ export function AudioAnalysisPage({ onBack }: AudioAnalysisPageProps) {
         const existingIds = new Set(itemsRef.current.map((item) => item.id));
         const newPaths = validPaths.filter((path) => !existingIds.has(path));
         if (newPaths.length === 0) {
-            toast.info("No new files added", {
-                description: "All selected files were already in the batch queue.",
+            toast.info(t("translation.common.noNewFilesAdded"), {
+                description: t("translation.audioAnalysis.allSelectedFilesWereAlready"),
             });
             return;
         }
@@ -324,15 +317,17 @@ export function AudioAnalysisPage({ onBack }: AudioAnalysisPageProps) {
             status: "pending" as const,
         }));
         if (validPaths.length !== newPaths.length) {
-            toast.info("Some files skipped", {
-                description: `${validPaths.length - newPaths.length} file(s) were already queued.`,
+            toast.info(t("translation.common.someFilesSkipped"), {
+                description: t("translation.analysis.skipped", { count: newPaths.length - validPaths.length }),
             });
         }
         setItems((prev) => [...prev, ...newItems]);
         if (!activeItemIdRef.current) {
             setActiveSelection(newItems[0]?.id ?? null);
         }
-        void runBatchAnalysis(newItems);
+        if (itemsRef.current.length === 0 && newItems.length === 1) {
+            void runBatchAnalysis(newItems);
+        }
     }, [ensureIdleQueue, runBatchAnalysis, setActiveSelection]);
     const addBrowserFiles = useCallback(async (files: File[]) => {
         if (!ensureIdleQueue()) {
@@ -341,8 +336,8 @@ export function AudioAnalysisPage({ onBack }: AudioAnalysisPageProps) {
         const validFiles = files.filter(isSupportedAudioFile);
         const invalidCount = files.length - validFiles.length;
         if (invalidCount > 0) {
-            toast.error("Unsupported format", {
-                description: `Only ${SUPPORTED_AUDIO_LABEL} files can be analyzed.`,
+            toast.error(t("translation.common.unsupportedFormat"), {
+                description: t("translation.audioAnalysis.onlyValue1FilesCanBe", { value1: SUPPORTED_AUDIO_LABEL }),
             });
         }
         if (validFiles.length === 0) {
@@ -361,38 +356,30 @@ export function AudioAnalysisPage({ onBack }: AudioAnalysisPageProps) {
         }))
             .filter((item) => !existingIds.has(item.id));
         if (newItems.length === 0) {
-            toast.info("No new files added", {
-                description: "All selected files were already in the batch queue.",
+            toast.info(t("translation.common.noNewFilesAdded"), {
+                description: t("translation.audioAnalysis.allSelectedFilesWereAlready"),
             });
             return;
         }
         if (validFiles.length !== newItems.length) {
-            toast.info("Some files skipped", {
-                description: `${validFiles.length - newItems.length} file(s) were already queued.`,
+            toast.info(t("translation.common.someFilesSkipped"), {
+                description: t("translation.analysis.skipped", { count: newItems.length - validFiles.length }),
             });
         }
         setItems((prev) => [...prev, ...newItems]);
         if (!activeItemIdRef.current) {
             setActiveSelection(newItems[0]?.id ?? null);
         }
-        void runBatchAnalysis(newItems);
+        if (itemsRef.current.length === 0 && newItems.length === 1) {
+            void runBatchAnalysis(newItems);
+        }
     }, [ensureIdleQueue, runBatchAnalysis, setActiveSelection]);
-    const handleSelectFiles = useCallback(async () => {
+    const handleSelectFiles = useCallback(() => {
         if (!ensureIdleQueue()) {
             return;
         }
-        try {
-            const selectedPaths = await SelectAudioFiles();
-            if (selectedPaths && selectedPaths.length > 0) {
-                await addPathItems(selectedPaths);
-            }
-            return;
-        }
-        catch {
-            fileInputRef.current?.click();
-            return;
-        }
-    }, [addPathItems, ensureIdleQueue]);
+        fileInputRef.current?.click();
+    }, [ensureIdleQueue]);
     const handleSelectFolder = useCallback(async () => {
         if (!ensureIdleQueue()) {
             return;
@@ -404,16 +391,16 @@ export function AudioAnalysisPage({ onBack }: AudioAnalysisPageProps) {
             }
             const folderFiles = await ListAudioFilesInDir(selectedFolder);
             if (!folderFiles || folderFiles.length === 0) {
-                toast.info("No audio files found", {
-                    description: `No ${SUPPORTED_AUDIO_LABEL} files were found in the selected folder.`,
+                toast.info(t("translation.common.noAudioFilesFound"), {
+                    description: t("translation.audioAnalysis.noValue1FilesWereFound", { value1: SUPPORTED_AUDIO_LABEL }),
                 });
                 return;
             }
             await addPathItems(folderFiles.map((file) => file.path));
         }
         catch (err) {
-            toast.error("Folder Selection Failed", {
-                description: err instanceof Error ? err.message : "Failed to select folder",
+            toast.error(t("translation.common.folderSelectionFailed"), {
+                description: err instanceof Error ? translateMessage(err.message) : t("translation.fileManager.failedSelectFolder"),
             });
         }
     }, [addPathItems, ensureIdleQueue]);
@@ -476,7 +463,6 @@ export function AudioAnalysisPage({ onBack }: AudioAnalysisPageProps) {
         clearStoredAnalysis();
         clearResult();
         setIsBatchRunning(false);
-        setBatchProgress(EMPTY_PROGRESS_STATE);
         setExportProgress(EMPTY_PROGRESS_STATE);
         setIsDragging(false);
     }, [clearResult, clearStoredAnalysis, isExportingBatch, isExportingSelected, setActiveSelection]);
@@ -487,15 +473,14 @@ export function AudioAnalysisPage({ onBack }: AudioAnalysisPageProps) {
         batchRunIdRef.current += 1;
         cancelAnalysis();
         setIsBatchRunning(false);
-        setBatchProgress(EMPTY_PROGRESS_STATE);
         setItems((prev) => prev.map((item) => item.status === "analyzing"
             ? {
                 ...item,
                 status: "pending",
             }
             : item));
-        toast.info("Batch analysis stopped", {
-            description: "Click Analyze to continue the remaining files.",
+        toast.info(t("translation.audioAnalysis.batchAnalysisStopped"), {
+            description: t("translation.audioAnalysis.clickAnalyzeContinueRemainingFiles"),
         });
     }, [cancelAnalysis, isBatchRunning]);
     const handleAnalyzePending = useCallback(() => {
@@ -514,8 +499,8 @@ export function AudioAnalysisPage({ onBack }: AudioAnalysisPageProps) {
         }
         const dataUrl = spectrumRef.current.getCanvasDataURL();
         if (!dataUrl) {
-            toast.error("Export Failed", {
-                description: "Cannot get canvas data",
+            toast.error(t("translation.audioAnalysis.exportFailed"), {
+                description: t("translation.audioAnalysis.cannotGetCanvasData"),
             });
             return;
         }
@@ -523,20 +508,20 @@ export function AudioAnalysisPage({ onBack }: AudioAnalysisPageProps) {
         try {
             if (activeItem.source === "path" && isAbsolutePath(activeItem.path)) {
                 const outPath = await SaveSpectrumImage(activeItem.path, dataUrl);
-                toast.success("PNG Exported", {
-                    description: `Saved to: ${outPath}`,
+                toast.success(t("translation.audioAnalysis.pngExported"), {
+                    description: t("translation.audioAnalysis.savedValue1", { value1: outPath }),
                 });
                 return;
             }
             const baseName = activeItem.name.replace(/\.[^/.]+$/, "") || "spectrogram";
             downloadDataURL(dataUrl, `${baseName}_spectrogram.png`);
-            toast.success("PNG Exported", {
-                description: "Spectrogram image downloaded",
+            toast.success(t("translation.audioAnalysis.pngExported"), {
+                description: t("translation.audioAnalysis.spectrogramImageDownloaded"),
             });
         }
         catch (err) {
-            toast.error("Export Failed", {
-                description: err instanceof Error ? err.message : "Failed to export image",
+            toast.error(t("translation.audioAnalysis.exportFailed"), {
+                description: err instanceof Error ? translateMessage(err.message) : t("translation.audioAnalysis.failedExportImage"),
             });
         }
         finally {
@@ -546,8 +531,8 @@ export function AudioAnalysisPage({ onBack }: AudioAnalysisPageProps) {
     const handleBatchExport = useCallback(async () => {
         const exportableItems = itemsRef.current.filter((item) => item.status === "success" && item.result?.spectrum);
         if (exportableItems.length === 0) {
-            toast.error("Nothing to export", {
-                description: "Analyze at least one file successfully before exporting PNGs.",
+            toast.error(t("translation.audioAnalysis.nothingExport"), {
+                description: t("translation.audioAnalysis.analyzeLeastOneFileSuccessfully"),
             });
             return;
         }
@@ -602,13 +587,13 @@ export function AudioAnalysisPage({ onBack }: AudioAnalysisPageProps) {
                 fileName: "",
             });
             if (successCount > 0) {
-                toast.success("Batch PNG Export Complete", {
-                    description: `Exported ${successCount} spectrogram PNG file(s)${failCount > 0 ? `, ${failCount} failed` : ""}`,
+                toast.success(t("translation.audioAnalysis.batchPngExportComplete"), {
+                    description: t("translation.analysis.exported", { count: successCount, failures: failCount > 0 ? t("translation.common.failures", { count: failCount }) : "" }),
                 });
             }
             else {
-                toast.error("Batch PNG Export Failed", {
-                    description: "No spectrogram PNG files were exported.",
+                toast.error(t("translation.audioAnalysis.batchPngExportFailed"), {
+                    description: t("translation.audioAnalysis.noSpectrogramPngFilesWere"),
                 });
             }
         }
@@ -636,31 +621,26 @@ export function AudioAnalysisPage({ onBack }: AudioAnalysisPageProps) {
     const batchDetailContent = !activeItem ? (<Card>
             <CardContent className="flex min-h-[320px] items-center justify-center px-6 py-10">
                 <p className="text-sm text-muted-foreground">
-                    Select a file from the batch queue to inspect its analysis result.
+                    {t("translation.audioAnalysis.selectFileBatchQueueInspect")}
                 </p>
             </CardContent>
-        </Card>) : activeItem.status !== "success" || !activeItem.result ? (<Card>
-            <CardHeader className="pb-3">
-                <CardTitle className="text-base">{activeItem.name}</CardTitle>
-                <p className="break-all font-mono text-sm text-muted-foreground">{activeItem.path}</p>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                {activeItem.status === "analyzing" && (<div className="space-y-3">
-                        <div className="flex items-center gap-3">
-                            <Spinner />
-                            <span className="text-sm text-muted-foreground">Analyzing audio quality...</span>
-                        </div>
-                        <Progress value={analysisProgress.percent} className="h-2 w-full"/>
-                        <p className="text-xs text-muted-foreground">{analysisProgress.message}</p>
-                    </div>)}
-                {activeItem.status === "pending" && (<p className="text-sm text-muted-foreground">
-                        This file is queued and waiting for batch analysis to start.
-                    </p>)}
-                {activeItem.status === "error" && (<div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-                        {activeItem.error || "Analysis failed"}
-                    </div>)}
-            </CardContent>
-        </Card>) : (<div className="space-y-4">
+        </Card>) : activeItem.status === "pending" ? (<div className="flex min-h-full flex-col items-center justify-center gap-3 text-center text-sm text-muted-foreground">
+            <Activity className="h-9 w-9 text-primary"/>
+            <span>{t("translation.audioAnalysis.fileQueuedWaitingBatchAnalysis")}</span>
+        </div>) : activeItem.status === "analyzing" ? (<div className="flex min-h-full items-center justify-center">
+            <div className="w-full max-w-md space-y-2">
+                <div className="flex items-center justify-between gap-4 text-sm text-muted-foreground">
+                    <span className="truncate">{analysisProgress.message || t("translation.audioAnalysis.analyzingAudioQuality")}</span>
+                    <span className="shrink-0 tabular-nums">{analysisProgress.percent}%</span>
+                </div>
+                <Progress value={analysisProgress.percent} className="h-2 w-full"/>
+                <p className="truncate text-center text-xs text-muted-foreground">{activeItem.name}</p>
+            </div>
+        </div>) : activeItem.status === "error" ? (<div className="flex min-h-full items-center justify-center">
+            <div className="w-full max-w-md rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+                {translateMessage(activeItem.error || t("translation.download.analysisFailed"))}
+            </div>
+        </div>) : activeItem.status !== "success" || !activeItem.result ? null : (<div className="space-y-4">
             <AudioAnalysis result={activeItem.result} analyzing={false} showAnalyzeButton={false} filePath={activeItem.path}/>
 
             <SpectrumVisualization ref={spectrumRef} sampleRate={activeItem.result.sample_rate} duration={activeItem.result.duration} spectrumData={activeItem.result.spectrum} fileName={activeItem.name} onReAnalyze={handleReAnalyzeSelectedSpectrum} isAnalyzingSpectrum={spectrumLoading} spectrumProgress={spectrumProgress}/>
@@ -669,95 +649,95 @@ export function AudioAnalysisPage({ onBack }: AudioAnalysisPageProps) {
             <AudioAnalysis result={activeItem.result} analyzing={false} showAnalyzeButton={false} filePath={activeItem.path}/>
 
             <SpectrumVisualization ref={spectrumRef} sampleRate={activeItem.result.sample_rate} duration={activeItem.result.duration} spectrumData={activeItem.result.spectrum} fileName={activeItem.name} onReAnalyze={handleReAnalyzeSelectedSpectrum} isAnalyzingSpectrum={spectrumLoading} spectrumProgress={spectrumProgress}/>
-        </div>) : activeItem.status === "analyzing" || activeItem.status === "pending" ? (<div className="flex h-[400px] items-center justify-center">
+        </div>) : activeItem.status === "analyzing" || activeItem.status === "pending" ? (<div className="flex min-h-full items-center justify-center">
             <div className="w-full max-w-md space-y-2">
                 <div className="flex items-center justify-between text-sm text-muted-foreground">
-                    <span>{activeItem.status === "pending" ? "Preparing..." : "Processing..."}</span>
+                    <span>{activeItem.status === "pending" ? t("translation.migrated.AudioAnalysisPage.preparing") : t("translation.migrated.AudioAnalysisPage.processing")}</span>
                     <span className="tabular-nums">{analysisProgress.percent}%</span>
                 </div>
                 <Progress value={analysisProgress.percent} className="h-2 w-full"/>
                 <p className="text-center text-xs text-muted-foreground">{analysisProgress.message}</p>
             </div>
-        </div>) : (<div className="flex h-[400px] items-center justify-center">
+        </div>) : (<div className="flex min-h-full items-center justify-center">
             <div className="w-full max-w-md rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-                {activeItem.error || "Analysis failed"}
+                {translateMessage(activeItem.error || t("translation.download.analysisFailed"))}
             </div>
         </div>);
     const showSingleModeActions = isSingleMode && activeItem?.status === "success" && activeItem.result;
-    return (<div className="space-y-6">
+    return (<div className="flex h-[calc(100dvh-5.5rem)] min-h-0 flex-col gap-6 md:h-[calc(100dvh-6.5rem)]">
             <input ref={fileInputRef} type="file" multiple accept={SUPPORTED_AUDIO_ACCEPT} className="hidden" onChange={handleInputChange}/>
 
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-4">
                     {onBack && (<Button variant="ghost" size="icon" onClick={onBack}>
                             <ArrowLeft className="h-5 w-5"/>
                         </Button>)}
-                    <h1 className="text-2xl font-bold">Audio Quality Analyzer</h1>
+                    <h1 className="text-2xl font-bold">{t("translation.common.audioQualityAnalyzer")}</h1>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                    {isBatchMode && isBatchRunning && (<Button onClick={handleStopBatch} variant="destructive" size="sm" disabled={isExportingBatch || isExportingSelected} className="gap-1.5">
+                    {isBatchMode && isBatchRunning && (<Button onClick={handleStopBatch} variant="destructive" disabled={isExportingBatch || isExportingSelected} className="gap-1.5">
                             <StopCircle className="h-4 w-4"/>
-                            Stop
+                            {t("translation.common.stop")}
                         </Button>)}
-                    {canResumeBatch && (<Button onClick={handleAnalyzePending} variant="outline" size="sm" disabled={isExportingBatch || isExportingSelected || spectrumLoading}>
-                            <Play className="h-4 w-4"/>
-                            Analyze
+                    {canResumeBatch && (<Button onClick={handleAnalyzePending} disabled={isExportingBatch || isExportingSelected || spectrumLoading}>
+                            <Activity className="h-4 w-4"/>
+                            {t("translation.audioAnalysis.analyze")}
                         </Button>)}
                     {isBatchMode && (<DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button variant="outline" size="sm" disabled={isBatchRunning || isExportingBatch || isExportingSelected}>
+                                <Button variant="outline" disabled={isBatchRunning || isExportingBatch || isExportingSelected}>
                                     <Upload className="h-4 w-4 mr-1"/>
-                                    Add
+                                    {t("translation.common.add")}
                                     <ChevronDown className="ml-1 h-4 w-4"/>
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="min-w-[180px]">
                                 <DropdownMenuItem onClick={handleSelectFiles} className="cursor-pointer">
                                     <Upload className="h-4 w-4"/>
-                                    Add Files
+                                    {t("translation.common.addFiles")}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={handleSelectFolder} className="cursor-pointer">
                                     <FolderOpen className="h-4 w-4"/>
-                                    Add Folder
+                                    {t("translation.common.addFolder")}
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>)}
-                    {showSingleModeActions && (<Button onClick={handleExportSelected} variant="outline" size="sm" disabled={isExportingSelected || spectrumLoading}>
+                    {showSingleModeActions && (<Button onClick={handleExportSelected} variant="outline" disabled={isExportingSelected || spectrumLoading}>
                             <Download className="h-4 w-4 mr-1"/>
-                            {isExportingSelected ? "Exporting..." : "Export PNG"}
+                            {isExportingSelected ? t("translation.migrated.AudioAnalysisPage.exporting") : t("translation.migrated.AudioAnalysisPage.exportPNG")}
                         </Button>)}
                     {isBatchMode && (<DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button variant="outline" size="sm" disabled={successItems.length === 0 || isExportingBatch || isExportingSelected || isBatchRunning || spectrumLoading}>
+                                <Button variant="outline" disabled={successItems.length === 0 || isExportingBatch || isExportingSelected || isBatchRunning || spectrumLoading}>
                                     <Download className="h-4 w-4 mr-1"/>
-                                    {isExportingBatch ? "Exporting..." : isExportingSelected ? "Exporting..." : "Export"}
+                                    {isExportingBatch ? t("translation.migrated.AudioAnalysisPage.exporting") : isExportingSelected ? t("translation.migrated.AudioAnalysisPage.exporting") : t("translation.migrated.AudioAnalysisPage.export")}
                                     <ChevronDown className="ml-1 h-4 w-4"/>
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="min-w-[200px]">
                                 <DropdownMenuItem onClick={handleExportSelected} className="cursor-pointer" disabled={!activeItem?.result?.spectrum}>
                                     <Download className="h-4 w-4"/>
-                                    Export Selected PNG
+                                    {t("translation.audioAnalysis.exportSelectedPng")}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={handleBatchExport} className="cursor-pointer" disabled={successItems.length === 0}>
                                     <Download className="h-4 w-4"/>
-                                    Export All PNG
+                                    {t("translation.audioAnalysis.exportAllPng")}
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>)}
-                    {showSingleModeActions && (<Button onClick={handleClearAll} variant="outline" size="sm" disabled={isExportingSelected}>
+                    {showSingleModeActions && (<Button onClick={handleClearAll} variant="destructive" disabled={isExportingSelected}>
                             <Trash2 className="h-4 w-4 mr-1"/>
-                            Clear
+                            {t("translation.common.clear")}
                         </Button>)}
-                    {isBatchMode && (<Button onClick={handleClearAll} variant="outline" size="sm" disabled={isExportingBatch || isExportingSelected}>
+                    {isBatchMode && (<Button onClick={handleClearAll} variant="destructive" disabled={isExportingBatch || isExportingSelected}>
                             <Trash2 className="h-4 w-4 mr-1"/>
-                            Clear
+                            {t("translation.common.clear")}
                         </Button>)}
                 </div>
             </div>
 
-            {items.length === 0 && (<div className={`flex h-[400px] flex-col items-center justify-center rounded-lg border-2 border-dashed transition-all ${isDragging ? "border-primary bg-primary/10" : "border-muted-foreground/30"}`} onDragOver={(event) => {
+            {items.length === 0 && (<div className={`flex min-h-0 flex-1 flex-col items-center justify-center rounded-lg border-2 border-dashed transition-all ${isDragging ? "border-primary bg-primary/10" : "border-muted-foreground/30"}`} onDragOver={(event) => {
                 event.preventDefault();
                 setIsDragging(true);
             }} onDragLeave={(event) => {
@@ -769,115 +749,79 @@ export function AudioAnalysisPage({ onBack }: AudioAnalysisPageProps) {
                     </div>
                     <p className="text-sm text-muted-foreground mb-4 text-center">
                         {isDragging
-                ? "Drop your audio files here"
-                : "Drag and drop audio files here, or click the button below to select"}
+                ? t("translation.migrated.AudioAnalysisPage.dropYourAudioFilesHere")
+                : t("translation.migrated.AudioAnalysisPage.dragAndDropAudioFilesHereOr")}
                     </p>
                     <div className="flex gap-3">
-                        <Button onClick={handleSelectFiles} size="lg">
-                            <Upload className="h-5 w-5"/>
-                            Select Files
+                        <Button onClick={handleSelectFiles}>
+                            <Upload className="h-4 w-4"/>
+                            {t("translation.common.selectFiles")}
                         </Button>
-                        <Button onClick={handleSelectFolder} size="lg" variant="outline">
-                            <Upload className="h-5 w-5"/>
-                            Select Folder
+                        <Button onClick={handleSelectFolder} variant="outline">
+                            <Upload className="h-4 w-4"/>
+                            {t("translation.common.selectFolder")}
                         </Button>
                     </div>
                     <p className="text-xs text-muted-foreground mt-4 text-center">
-                        Supported formats: FLAC, MP3, M4A, AAC
+                        {t("translation.audioAnalysis.supportedFormatsFlacMp3M4a")}
                     </p>
                 </div>)}
 
-            {isSingleMode && (<div className="space-y-4">
+            {isSingleMode && (<div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1 custom-scrollbar">
                     {singleModeContent}
                 </div>)}
 
-            {isBatchMode && (<div className="grid gap-4 xl:grid-cols-[360px,minmax(0,1fr)]">
-                    <div className="space-y-3">
-                        {(isBatchRunning || isExportingBatch) && (<Card className="gap-2 py-4">
-                                <CardHeader className="px-4 pb-0">
-                                    <CardTitle className="text-sm">
-                                        {isExportingBatch ? "Batch PNG Export" : "Batch Analysis"}
-                                    </CardTitle>
-                                </CardHeader>
-                                <CardContent className="space-y-2 px-4">
-                                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                                        <span className="truncate pr-3">
-                                            {isExportingBatch
-                    ? exportProgress.fileName || "Preparing export..."
-                    : batchProgress.fileName || analysisProgress.message}
-                                        </span>
-                                        <span className="tabular-nums">
-                                            {isExportingBatch
-                    ? `${exportProgress.completed}/${exportProgress.total}`
-                    : `${Math.min(batchProgress.completed + (isBatchRunning ? 1 : 0), batchProgress.total)}/${batchProgress.total}`}
+            {isBatchMode && (<div className="flex min-h-0 flex-1 overflow-hidden rounded-lg border">
+                    <div className="flex h-full w-full min-h-0 flex-col gap-4 p-4 md:flex-row">
+                        <div className="flex min-h-0 shrink-0 flex-col gap-3 md:w-80 md:border-r md:pr-4">
+                            {isExportingBatch && (<div className="shrink-0 space-y-2 rounded-lg border bg-muted/20 p-3">
+                                    <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                                        <span className="truncate">{exportProgress.fileName || t("translation.migrated.AudioAnalysisPage.preparing")}</span>
+                                        <span className="shrink-0 font-mono tabular-nums">
+                                            {t("translation.migrated.AudioAnalysisPage.text", { value1: exportProgress.completed, value2: exportProgress.total })}
                                         </span>
                                     </div>
-                                    <Progress value={isExportingBatch ? exportPercent : batchPercent} className="h-1.5 w-full"/>
-                                    {!isExportingBatch && (<div className="flex items-center justify-between text-xs text-muted-foreground">
-                                            <span>{analysisProgress.message}</span>
-                                            <span className="tabular-nums">{analysisProgress.percent}%</span>
-                                        </div>)}
-                                </CardContent>
-                            </Card>)}
-
-                        <Card className="gap-2 overflow-hidden py-4">
-                            <CardHeader className="px-4 pb-0">
-                                <div className="flex items-center justify-between gap-3">
-                                    <CardTitle className="text-sm">Batch Queue</CardTitle>
-                                    <p className="text-xs text-muted-foreground">
-                                        {items.length} queued • {successItems.length} ready
-                                    </p>
-                                </div>
-                            </CardHeader>
-                            <CardContent className="px-4">
-                                <div className="max-h-[232px] space-y-2 overflow-y-auto pr-1">
-                                    {items.map((item) => {
+                                    <Progress value={exportPercent} className="h-1.5 w-full"/>
+                                </div>)}
+                            <div className="flex shrink-0 items-center justify-between gap-3">
+                                <p className="text-sm font-medium">{t("translation.common.batchQueue")}</p>
+                                <p className="text-xs text-muted-foreground">
+                                    {items.length} {t("translation.audioAnalysis.queued")} {" • "}{successItems.length} {t("translation.audioAnalysis.ready")}
+                                </p>
+                            </div>
+                            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1 custom-scrollbar">
+                                {items.map((item) => {
                 const isActive = item.id === activeItemId;
-                const isSelectable = item.status !== "pending";
-                return (<div key={item.id} role={isSelectable ? "button" : undefined} tabIndex={isSelectable ? 0 : -1} className={`flex w-full items-start gap-2.5 rounded-lg border px-3 py-2.5 text-left transition-colors ${isActive
-                        ? "border-primary bg-primary/5"
-                        : isSelectable
-                            ? "border-border hover:border-primary/40"
-                            : "border-border"}`} onClick={() => {
-                        if (!isSelectable) {
-                            return;
-                        }
-                        handleSelectItem(item.id);
-                    }} onKeyDown={(event) => {
-                        if (!isSelectable) {
-                            return;
-                        }
+                return (<div key={item.id} role="button" tabIndex={0} className={`flex w-full cursor-pointer items-start gap-2.5 rounded-lg border px-3 py-2.5 text-left transition-colors ${isActive ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"}`} onClick={() => handleSelectItem(item.id)} onKeyDown={(event) => {
                         if (event.key === "Enter" || event.key === " ") {
                             event.preventDefault();
                             handleSelectItem(item.id);
                         }
                     }}>
-                                                <div className="mt-0.5 shrink-0">{statusIcon(item.status)}</div>
-                                                <div className="min-w-0 flex-1">
-                                                    <p className="truncate text-sm font-medium">{item.name}</p>
-                                                    <p className={`truncate text-xs ${item.status === "error" ? "text-destructive" : "text-muted-foreground"}`}>
-                                                        {itemMetaLine(item)}
-                                                    </p>
-                                                    <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                                                        <span>{formatFileSize(item.size)}</span>
-                                                        <span>{fileNameFromPath(item.path).split(".").pop()?.toUpperCase() || "AUDIO"}</span>
-                                                    </div>
-                                                </div>
-                                                <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={(event) => {
+                                        <div className="mt-0.5 shrink-0">{statusIcon(item.status)}</div>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="truncate text-sm font-medium">{item.name}</p>
+                                            <p className={`truncate text-xs ${item.status === "error" ? "text-destructive" : "text-muted-foreground"}`}>
+                                                {itemMetaLine(item)}
+                                            </p>
+                                            <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+                                                <span>{formatFileSize(item.size)}</span>
+                                                <span>{fileNameFromPath(item.path).split(".").pop()?.toUpperCase() || t("translation.audioAnalysis.audio")}</span>
+                                            </div>
+                                        </div>
+                                        <Button type="button" variant="ghost" size="icon" className="shrink-0" onClick={(event) => {
                         event.stopPropagation();
                         handleRemoveItem(item.id);
                     }} disabled={isBatchRunning || isExportingBatch || isExportingSelected || spectrumLoading}>
-                                                    <X className="h-4 w-4"/>
-                                                </Button>
-                                            </div>);
+                                            <X className="h-4 w-4"/>
+                                        </Button>
+                                    </div>);
             })}
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </div>
-
-                    <div className="space-y-4">
-                        {batchDetailContent}
+                            </div>
+                        </div>
+                        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto pr-1 custom-scrollbar">
+                            {batchDetailContent}
+                        </div>
                     </div>
                 </div>)}
         </div>);

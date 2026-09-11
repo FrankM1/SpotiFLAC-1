@@ -36,6 +36,15 @@ type AnalysisDecodeResponse struct {
 	BitDepth      string  `json:"bit_depth,omitempty"`
 }
 
+const tempoKeyAnalysisSampleRate = 44100
+
+type TempoKeyDecodeResponse struct {
+	PCMBase64  string  `json:"pcm_base64"`
+	SampleRate uint32  `json:"sample_rate"`
+	Duration   float64 `json:"duration"`
+	FileSize   int64   `json:"file_size"`
+}
+
 func GetTrackMetadata(filepath string) (*AnalysisResult, error) {
 	if !fileExists(filepath) {
 		return nil, fmt.Errorf("file does not exist: %s", filepath)
@@ -153,7 +162,30 @@ func DecodeAudioForAnalysis(filePath string) (*AnalysisDecodeResponse, error) {
 	return resp, nil
 }
 
+func DecodeAudioForTempoKey(filePath string) (*TempoKeyDecodeResponse, error) {
+	metadata, err := GetTrackMetadata(filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	pcmBase64, err := extractPCMBase64(filePath, tempoKeyAnalysisSampleRate)
+	if err != nil {
+		return nil, err
+	}
+
+	return &TempoKeyDecodeResponse{
+		PCMBase64:  pcmBase64,
+		SampleRate: tempoKeyAnalysisSampleRate,
+		Duration:   metadata.Duration,
+		FileSize:   metadata.FileSize,
+	}, nil
+}
+
 func extractAnalysisPCMBase64(filePath string) (string, error) {
+	return extractPCMBase64(filePath, 0)
+}
+
+func extractPCMBase64(filePath string, targetSampleRate int) (string, error) {
 	ffmpegPath, err := GetFFmpegPath()
 	if err != nil {
 		return "", err
@@ -180,6 +212,15 @@ func extractAnalysisPCMBase64(filePath string) (string, error) {
 			"-acodec", "pcm_s16le",
 			"pipe:1",
 		},
+	}
+
+	if targetSampleRate > 0 {
+		for i := range argSets {
+			outputIndex := len(argSets[i]) - 1
+			withSampleRate := append([]string{}, argSets[i][:outputIndex]...)
+			withSampleRate = append(withSampleRate, "-ar", strconv.Itoa(targetSampleRate), argSets[i][outputIndex])
+			argSets[i] = withSampleRate
+		}
 	}
 
 	var lastErr error

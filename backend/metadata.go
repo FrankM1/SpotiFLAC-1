@@ -828,6 +828,9 @@ func extractFullMetadataWithFFprobe(filePath string) (Metadata, error) {
 	}
 
 	metadata.UPC = firstPreferredFFprobeUPCValue(allTags)
+	if isArtworkPlaceholderTitle(metadata.Title) {
+		metadata.Title = ""
+	}
 
 	return metadata, nil
 }
