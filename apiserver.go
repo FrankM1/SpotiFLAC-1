@@ -20,7 +20,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/afkarxyz/SpotiFLAC/backend"
+	"github.com/spotbye/SpotiFLAC/backend"
 )
 
 const apiDefaultPort = 8787

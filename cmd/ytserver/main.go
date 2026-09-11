@@ -29,7 +29,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/afkarxyz/SpotiFLAC/backend"
+	"github.com/spotbye/SpotiFLAC/backend"
 )
 
 var (
