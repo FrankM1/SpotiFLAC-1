@@ -944,17 +944,6 @@ export function SettingsPage({ onUnsavedChangesChange, onResetRequest, }: Settin
                       </SelectContent>
                     </Select>)}
 
-                  <div className="flex items-center gap-2">
-                    <Label htmlFor="concurrent-downloads" className="text-sm text-muted-foreground whitespace-nowrap">At once</Label>
-                    <Select value={String(tempSettings.concurrentDownloads || 3)} onValueChange={(value) => setTempSettings((prev) => ({ ...prev, concurrentDownloads: Number(value) }))}>
-                      <SelectTrigger id="concurrent-downloads" className="h-9 w-fit">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {[1, 2, 3, 4, 5, 6, 8, 10].map((n) => (<SelectItem key={n} value={String(n)}>{n}</SelectItem>))}
-                      </SelectContent>
-                    </Select>
-                  </div>
                 </div>
 
                 {isAtmosSelected && (<div className="flex flex-wrap items-center gap-3 pt-2">

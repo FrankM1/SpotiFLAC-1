@@ -260,7 +260,6 @@ export const DEFAULT_SETTINGS: Settings = {
     amazonQuality: "16",
     autoOrder: "tidal-qobuz-amazon",
     autoQuality: "16",
-    concurrentDownloads: 3,
     allowFallback: true,
     allowAtmosFallback: true,
     atmosFallbackQuality: "24",
