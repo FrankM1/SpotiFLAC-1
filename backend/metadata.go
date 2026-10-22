@@ -38,6 +38,7 @@ type Metadata struct {
 	ISRC        string
 	UPC         string
 	Genre       string
+	Source      string
 }
 
 func resolveMetadataSeparator(separator string) string {

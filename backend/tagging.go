@@ -190,6 +190,7 @@ func buildTagMap(filePath string, metadata Metadata) map[string][]string {
 
 	if isFLACLike {
 		addTag("DESCRIPTION", metadata.Description)
+		addTag("SOURCE", metadata.Source)
 	}
 
 	addTag(taglib.Comment, resolveMetadataComment(metadata))

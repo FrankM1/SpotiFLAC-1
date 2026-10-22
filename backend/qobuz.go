@@ -18,6 +18,8 @@ type QobuzDownloader struct {
 	customURL   string
 	SourceURL   string
 	SourceLabel string
+	// Lossy is set when the audio came from the YouTube-backed custom server.
+	Lossy bool
 
 	// YouTube-backed custom-server hints. When a custom server URL is set, the
 	// track is resolved directly from these Spotify fields instead of the Qobuz
@@ -30,7 +32,7 @@ type QobuzDownloader struct {
 
 func (q *QobuzDownloader) SetCustomAPIURL(apiURL string) {
 	apiURL = strings.TrimRight(strings.TrimSpace(apiURL), "/")
-	if !strings.HasPrefix(apiURL, "https://") {
+	if !strings.HasPrefix(apiURL, "https://") && !strings.HasPrefix(apiURL, "http://") {
 		apiURL = ""
 	}
 	q.customURL = apiURL
@@ -645,6 +647,7 @@ func (q *QobuzDownloader) DownloadTrackWithISRC(isrc, outputDir, quality, filena
 		track = &QobuzTrack{Title: q.ytTitle}
 		track.Performer.Name = q.ytArtist
 		q.SourceLabel = strings.TrimSpace(fmt.Sprintf("%s - %s", q.ytArtist, q.ytTitle))
+		q.Lossy = true
 	} else {
 		found, err := q.searchByISRC(isrc, spotifyTrackName, spotifyArtistName, spotifyAlbumName)
 		if err != nil {
@@ -777,6 +780,10 @@ func (q *QobuzDownloader) DownloadTrackWithISRC(isrc, outputDir, quality, filena
 		ISRC:        isrc,
 		UPC:         upc,
 		Genre:       mbMeta.Genre,
+	}
+	if q.Lossy {
+		metadata.Source = "YouTube"
+		metadata.Description = "Source: YouTube (lossy transcode) - not true lossless"
 	}
 
 	if err := EmbedMetadata(filepath, metadata, coverPath); err != nil {

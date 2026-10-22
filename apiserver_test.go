@@ -255,3 +255,44 @@ func TestNoCORSHeaderWithoutOrigin(t *testing.T) {
 		t.Fatalf("no Origin header should mean no CORS grant")
 	}
 }
+
+func TestLossyJobReportsYouTubeSource(t *testing.T) {
+	s := newAPIServer(&App{})
+	job := s.enqueue(apiDownloadRequest{Artist: "Brian Mart", Title: "Afro Dite"})
+	s.completeJob(job, "qobuz", DownloadResponse{
+		Success:     true,
+		File:        "/tmp/x/Afro Dite.flac",
+		SourceLabel: "Brian Mart - Afro Dite",
+		Lossy:       true,
+	})
+
+	rec := httptest.NewRecorder()
+	testMux(s).ServeHTTP(rec, newAPIRequest(http.MethodGet, "/download/"+job.ID, nil))
+	body := rec.Body.String()
+	if !strings.Contains(body, `"lossy":true`) {
+		t.Fatalf("expected lossy:true in %s", body)
+	}
+	var view apiJobView
+	if err := json.Unmarshal(rec.Body.Bytes(), &view); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if view.Status != "done" || view.Source != "youtube (Brian Mart - Afro Dite)" {
+		t.Fatalf("unexpected job view: %+v", view)
+	}
+}
+
+func TestLosslessJobKeepsServiceSource(t *testing.T) {
+	s := newAPIServer(&App{})
+	job := s.enqueue(apiDownloadRequest{Artist: "Brian Mart", Title: "Afro Dite"})
+	s.completeJob(job, "tidal", DownloadResponse{Success: true, File: "/tmp/x/a.flac", SourceLabel: "Brian Mart - Afro Dite"})
+
+	view := s.jobView(job)
+	if view.Lossy || view.Source != "tidal (Brian Mart - Afro Dite)" {
+		t.Fatalf("unexpected job view: %+v", view)
+	}
+	rec := httptest.NewRecorder()
+	testMux(s).ServeHTTP(rec, newAPIRequest(http.MethodGet, "/download/"+job.ID, nil))
+	if strings.Contains(rec.Body.String(), "lossy") {
+		t.Fatalf("lossless job should omit lossy: %s", rec.Body.String())
+	}
+}

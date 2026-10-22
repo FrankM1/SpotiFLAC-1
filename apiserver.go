@@ -48,6 +48,7 @@ type apiJob struct {
 	Status    apiJobStatus
 	FilePath  string
 	Source    string
+	Lossy     bool
 	Error     string
 	ItemID    string
 	CreatedAt time.Time
@@ -62,6 +63,7 @@ type apiJobView struct {
 	StatusText string   `json:"statusText,omitempty"`
 	FilePath   string   `json:"filePath,omitempty"`
 	Source     string   `json:"source,omitempty"`
+	Lossy      bool     `json:"lossy,omitempty"`
 	Error      *string  `json:"error"`
 }
 
@@ -300,6 +302,7 @@ func (s *apiServer) jobView(job *apiJob) apiJobView {
 		Status:   string(job.Status),
 		FilePath: job.FilePath,
 		Source:   job.Source,
+		Lossy:    job.Lossy,
 	}
 	if job.Error != "" {
 		e := job.Error
@@ -332,6 +335,23 @@ func (s *apiServer) setJobStatus(job *apiJob, status apiJobStatus) {
 	s.mu.Lock()
 	job.Status = status
 	s.mu.Unlock()
+}
+
+// completeJob marks job done. A lossy result is reported as youtube, since the
+// audio did not come from the named lossless service.
+func (s *apiServer) completeJob(job *apiJob, service string, resp DownloadResponse) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	job.Status = apiJobDone
+	job.FilePath = resp.File
+	job.Lossy = resp.Lossy
+	if resp.Lossy {
+		service = "youtube"
+	}
+	job.Source = service
+	if resp.SourceLabel != "" {
+		job.Source = fmt.Sprintf("%s (%s)", service, resp.SourceLabel)
+	}
 }
 
 func (s *apiServer) failJob(job *apiJob, msg string) {
@@ -522,15 +542,8 @@ func (s *apiServer) runJob(job *apiJob) {
 
 		resp, err := s.app.DownloadTrack(req)
 		if resp.Success {
-			s.mu.Lock()
-			job.Status = apiJobDone
-			job.FilePath = resp.File
-			job.Source = service
-			if resp.SourceLabel != "" {
-				job.Source = fmt.Sprintf("%s (%s)", service, resp.SourceLabel)
-			}
-			s.mu.Unlock()
-			fmt.Printf("[API] Job %s done via %s: %s\n", job.ID, service, resp.File)
+			s.completeJob(job, service, resp)
+			fmt.Printf("[API] Job %s done via %s: %s\n", job.ID, job.Source, resp.File)
 			return
 		}
 		msg := resp.Error

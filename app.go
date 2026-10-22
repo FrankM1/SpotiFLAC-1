@@ -25,6 +25,7 @@ import (
 type App struct {
 	ctx                          context.Context
 	api                          *apiServer
+	ytServer                     ytServerLauncher
 	replayGainAnalysisMu         sync.Mutex
 	replayGainAnalysisCancel     context.CancelFunc
 	replayGainAnalysisGeneration uint64
@@ -346,12 +347,14 @@ func (a *App) startup(ctx context.Context) {
 
 	a.api = newAPIServer(a)
 	a.api.start()
+	go a.ensureYTServer()
 }
 
 func (a *App) shutdown(ctx context.Context) {
 	if a.api != nil {
 		a.api.stop()
 	}
+	a.ytServer.stop()
 	backend.CloseLibraryIndexDB()
 	backend.ClosePersistentQueueDB()
 	backend.CloseHistoryDB()
@@ -435,6 +438,7 @@ type DownloadResponse struct {
 	ItemID        string `json:"item_id,omitempty"`
 	SourceURL     string `json:"source_url,omitempty"`
 	SourceLabel   string `json:"source_label,omitempty"`
+	Lossy         bool   `json:"lossy,omitempty"`
 	OriginalFile  string `json:"original_file,omitempty"`
 	ConvertedFile string `json:"converted_file,omitempty"`
 }
@@ -677,6 +681,7 @@ func (a *App) DownloadTrack(req DownloadRequest) (DownloadResponse, error) {
 	var filename string
 	var sourceURL string
 	var sourceLabel string
+	var lossy bool
 
 	if req.FilenameFormat == "" {
 		req.FilenameFormat = "title-artist"
@@ -874,6 +879,7 @@ func (a *App) DownloadTrack(req DownloadRequest) (DownloadResponse, error) {
 		sourceURL = downloader.SourceURL
 
 	case "qobuz":
+		a.ytServer.ensure(req.QobuzAPIURL)
 
 		isrc := strings.TrimSpace(req.ISRC)
 		if isrc == "" {
@@ -892,6 +898,7 @@ func (a *App) DownloadTrack(req DownloadRequest) (DownloadResponse, error) {
 		filename, err = downloader.DownloadTrackWithISRC(isrc, req.OutputDir, quality, req.FilenameFormat, req.TrackNumber, req.Position, req.TrackName, req.ArtistName, req.AlbumName, req.AlbumArtist, req.ReleaseDate, req.UseAlbumTrackNumber, req.CoverURL, req.EmbedMaxQualityCover, req.SpotifyTrackNumber, req.SpotifyDiscNumber, req.SpotifyTotalTracks, req.SpotifyTotalDiscs, req.Copyright, req.Publisher, req.Composer, metadataSeparator, spotifyURL, req.AllowFallback, req.UseFirstArtistOnly, req.UseSingleGenre, req.EmbedGenre)
 		sourceURL = downloader.SourceURL
 		sourceLabel = downloader.SourceLabel
+		lossy = downloader.Lossy
 
 	default:
 		return DownloadResponse{
@@ -1144,6 +1151,7 @@ func (a *App) DownloadTrack(req DownloadRequest) (DownloadResponse, error) {
 		ItemID:        itemID,
 		SourceURL:     sourceURL,
 		SourceLabel:   sourceLabel,
+		Lossy:         lossy,
 		OriginalFile:  originalFile,
 		ConvertedFile: convertedFile,
 	}, nil

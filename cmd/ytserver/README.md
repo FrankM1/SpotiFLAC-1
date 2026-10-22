@@ -49,6 +49,11 @@ Flags:
 
 ## Use it from the app
 
+The desktop app now starts this server itself. If the Qobuz custom instance is a
+`127.0.0.1` or `localhost` URL and nothing answers there, the app launches the
+`ytserver` binary from its bundle (or PATH) and logs to `ytserver.log` next to
+`config.json`.
+
 1. Start the server.
 2. In SpotiFLAC → Settings → Qobuz custom instance, enter the server URL
    (e.g. `http://127.0.0.1:8790`) and click **Check** — it should report online.
