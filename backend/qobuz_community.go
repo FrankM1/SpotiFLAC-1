@@ -83,6 +83,12 @@ func (q *QobuzDownloader) getQobuzCustomDownloadURL(trackID int64, quality strin
 			endpoint += "&duration=" + url.QueryEscape(strconv.Itoa(q.ytDuration))
 		}
 	}
+	return q.requestCustomFileURL(endpoint)
+}
+
+// requestCustomFileURL calls a custom server endpoint that answers with
+// {success, data:{url}} and returns that file URL.
+func (q *QobuzDownloader) requestCustomFileURL(endpoint string) (string, error) {
 	req, err := NewRequestWithDefaultHeaders(http.MethodGet, endpoint, nil)
 	if err != nil {
 		return "", err

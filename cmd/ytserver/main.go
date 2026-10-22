@@ -25,6 +25,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -79,6 +80,7 @@ func main() {
 	mux.HandleFunc("/health", handleHealth)
 	mux.HandleFunc("/status", handleHealth)
 	mux.HandleFunc("/api/download-music", handleResolve)
+	mux.HandleFunc("/api/download-youtube", handleResolveVideo)
 	mux.HandleFunc("/file/", handleFile)
 	// Root returns 200 so the app's API-status probe (which GETs the base URL)
 	// reports this local instance as online.
@@ -177,6 +179,34 @@ func handleResolve(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"data":    map[string]any{"url": fileURL},
+	})
+}
+
+// youtubeIDPattern matches a YouTube video id.
+var youtubeIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
+
+// handleResolveVideo implements GET /api/download-youtube?v=&title=&artist=.
+// The caller names the exact video, so there is no search: it returns the same
+// {success:true, data:{url}} shape as /api/download-music for that video.
+func handleResolveVideo(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	videoID := strings.TrimSpace(q.Get("v"))
+	title := strings.TrimSpace(q.Get("title"))
+	artist := strings.TrimSpace(q.Get("artist"))
+	if !youtubeIDPattern.MatchString(videoID) {
+		writeErr(w, http.StatusBadRequest, "v must be an 11-character YouTube video id")
+		return
+	}
+	if title == "" || artist == "" {
+		writeErr(w, http.StatusBadRequest, "provide title and artist")
+		return
+	}
+
+	token := signToken(filePayload{Video: videoID, Title: title, Artist: artist})
+	log.Printf("resolved [link] %q - %q -> yt:%s", artist, title, videoID)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"data":    map[string]any{"url": baseURL(r) + "/file/" + token},
 	})
 }
 

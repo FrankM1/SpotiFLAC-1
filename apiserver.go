@@ -13,8 +13,10 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -40,6 +42,9 @@ type apiDownloadRequest struct {
 	Artist    string `json:"artist"`
 	Title     string `json:"title"`
 	OutputDir string `json:"outputDir"`
+	// YouTubeURL names the exact video to take the audio from. When set, no
+	// search runs and spotifyId/isrc do not choose the audio.
+	YouTubeURL string `json:"youtubeUrl"`
 }
 
 type apiJob struct {
@@ -204,7 +209,55 @@ func (s *apiServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// defaultYTRelayURL is where ytserver_launcher starts the relay when the
+// custom Qobuz URL does not point at a loopback relay.
+const defaultYTRelayURL = "http://127.0.0.1:8790"
+
+var youtubeIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
+
+// parseYouTubeVideoID returns the video id from a watch, youtu.be, music,
+// or shorts link, or from a bare 11-character id.
+func parseYouTubeVideoID(raw string) (string, bool) {
+	raw = strings.TrimSpace(raw)
+	if youtubeIDPattern.MatchString(raw) {
+		return raw, true
+	}
+	if !strings.Contains(raw, "://") {
+		raw = "https://" + raw
+	}
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return "", false
+	}
+	host := strings.TrimPrefix(strings.ToLower(u.Hostname()), "www.")
+	host = strings.TrimPrefix(host, "m.")
+	path := strings.Trim(u.Path, "/")
+	id := ""
+	switch host {
+	case "youtu.be":
+		id = path
+	case "youtube.com", "music.youtube.com":
+		if path == "watch" {
+			id = u.Query().Get("v")
+		} else if rest, ok := strings.CutPrefix(path, "shorts/"); ok {
+			id = rest
+		}
+	}
+	if !youtubeIDPattern.MatchString(id) {
+		return "", false
+	}
+	return id, true
+}
+
 func validateAPIRequest(req apiDownloadRequest) error {
+	if strings.TrimSpace(req.YouTubeURL) != "" {
+		if _, ok := parseYouTubeVideoID(req.YouTubeURL); !ok {
+			return fmt.Errorf("youtubeUrl is not a recognised YouTube video link")
+		}
+		if strings.TrimSpace(req.Artist) == "" || strings.TrimSpace(req.Title) == "" {
+			return fmt.Errorf("artist and title are required with youtubeUrl")
+		}
+	}
 	hasID := strings.TrimSpace(req.SpotifyID) != "" ||
 		(strings.TrimSpace(req.Artist) != "" && strings.TrimSpace(req.Title) != "")
 	if !hasID {
@@ -354,6 +407,17 @@ func (s *apiServer) completeJob(job *apiJob, service string, resp DownloadRespon
 	}
 }
 
+// completeYouTubeLinkJob marks an exact-video job done. The audio is always
+// a lossy YouTube transcode.
+func (s *apiServer) completeYouTubeLinkJob(job *apiJob, videoID, file string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	job.Status = apiJobDone
+	job.FilePath = file
+	job.Lossy = true
+	job.Source = fmt.Sprintf("youtube (%s)", videoID)
+}
+
 func (s *apiServer) failJob(job *apiJob, msg string) {
 	s.mu.Lock()
 	job.Status = apiJobFailed
@@ -430,8 +494,70 @@ func apiSettingBool(settings map[string]interface{}, key string) bool {
 	return false
 }
 
+// apiOutputDir is the request's outputDir, else the user's download path.
+func apiOutputDir(req apiDownloadRequest, settings map[string]interface{}) string {
+	outputDir := strings.TrimSpace(req.OutputDir)
+	if outputDir == "" {
+		outputDir = apiSettingString(settings, "downloadPath")
+	}
+	if outputDir == "" {
+		outputDir = backend.GetDefaultMusicPath()
+	}
+	return outputDir
+}
+
+// ytRelayURL is the relay to use: the custom Qobuz URL when it points at a
+// loopback relay, else the default local relay address.
+func ytRelayURL(settings map[string]interface{}) string {
+	custom := apiSettingString(settings, "customQobuzApi")
+	if loopbackRelayAddr(custom) != "" {
+		return strings.TrimRight(custom, "/")
+	}
+	return defaultYTRelayURL
+}
+
+// runYouTubeLinkJob downloads the audio of the exact video the caller named.
+func (s *apiServer) runYouTubeLinkJob(job *apiJob) {
+	videoID, _ := parseYouTubeVideoID(job.Req.YouTubeURL)
+	title := strings.TrimSpace(job.Req.Title)
+	artist := strings.TrimSpace(job.Req.Artist)
+
+	settings, _ := s.app.LoadSettings()
+	relay := ytRelayURL(settings)
+	s.app.ytServer.ensure(relay)
+
+	itemID := fmt.Sprintf("api-%s", job.ID)
+	backend.AddToQueue(itemID, title, artist, "", "")
+	backend.StartDownloadItem(itemID)
+	s.mu.Lock()
+	job.ItemID = itemID
+	s.mu.Unlock()
+
+	file, err := backend.NewQobuzDownloader().DownloadYouTubeVideo(relay, videoID, apiOutputDir(job.Req, settings), apiSettingString(settings, "filenameTemplate"), title, artist)
+	if err != nil {
+		s.failJob(job, fmt.Sprintf("[youtube] %v", err))
+		return
+	}
+	if existing, ok := strings.CutPrefix(file, "EXISTS:"); ok {
+		file = existing
+		backend.SkipDownloadItem(itemID, file)
+	} else {
+		size := 0.0
+		if info, statErr := os.Stat(file); statErr == nil {
+			size = float64(info.Size()) / (1024 * 1024)
+		}
+		backend.CompleteDownloadItem(itemID, file, size)
+	}
+	s.completeYouTubeLinkJob(job, videoID, file)
+	fmt.Printf("[API] Job %s done via %s: %s\n", job.ID, job.Source, file)
+}
+
 func (s *apiServer) runJob(job *apiJob) {
 	s.setJobStatus(job, apiJobDownloading)
+	if strings.TrimSpace(job.Req.YouTubeURL) != "" {
+		s.runYouTubeLinkJob(job)
+		return
+	}
 
 	track, err := s.resolveTrack(job)
 	if err != nil {
@@ -441,13 +567,7 @@ func (s *apiServer) runJob(job *apiJob) {
 
 	settings, _ := s.app.LoadSettings()
 
-	outputDir := strings.TrimSpace(job.Req.OutputDir)
-	if outputDir == "" {
-		outputDir = apiSettingString(settings, "downloadPath")
-	}
-	if outputDir == "" {
-		outputDir = backend.GetDefaultMusicPath()
-	}
+	outputDir := apiOutputDir(job.Req, settings)
 
 	// Mirror the frontend's provider selection: explicit downloader, or the
 	// user's auto order.

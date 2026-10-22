@@ -296,3 +296,114 @@ func TestLosslessJobKeepsServiceSource(t *testing.T) {
 		t.Fatalf("lossless job should omit lossy: %s", rec.Body.String())
 	}
 }
+
+func TestParseYouTubeVideoID(t *testing.T) {
+	const id = "adDQxrFdK4I"
+	for _, raw := range []string{
+		"https://www.youtube.com/watch?v=adDQxrFdK4I",
+		"https://www.youtube.com/watch?v=adDQxrFdK4I&list=RDadDQxrFdK4I&t=42s",
+		"https://youtube.com/watch?feature=share&v=adDQxrFdK4I",
+		"http://m.youtube.com/watch?v=adDQxrFdK4I",
+		"youtube.com/watch?v=adDQxrFdK4I",
+		"https://youtu.be/adDQxrFdK4I",
+		"https://youtu.be/adDQxrFdK4I?si=abc123&t=10",
+		"https://music.youtube.com/watch?v=adDQxrFdK4I&feature=share",
+		"https://www.youtube.com/shorts/adDQxrFdK4I",
+		"https://youtube.com/shorts/adDQxrFdK4I?feature=share",
+		"adDQxrFdK4I",
+		"  adDQxrFdK4I  ",
+	} {
+		got, ok := parseYouTubeVideoID(raw)
+		if !ok || got != id {
+			t.Errorf("%q: got (%q, %v), want %q", raw, got, ok, id)
+		}
+	}
+
+	for _, raw := range []string{
+		"",
+		"not a link",
+		"adDQxrFdK4",
+		"adDQxrFdK4I1",
+		"adDQxrFdK4?",
+		"https://www.youtube.com/watch",
+		"https://www.youtube.com/watch?v=short",
+		"https://www.youtube.com/channel/UCadDQxrFdK4I",
+		"https://www.youtube.com/playlist?list=PLadDQxrFdK4I",
+		"https://vimeo.com/watch?v=adDQxrFdK4I",
+		"https://evil-youtube.com/watch?v=adDQxrFdK4I",
+		"https://youtu.be/",
+		"ftp://youtu.be/adDQxrFdK4I",
+	} {
+		if got, ok := parseYouTubeVideoID(raw); ok {
+			t.Errorf("%q: expected rejection, got %q", raw, got)
+		}
+	}
+}
+
+func TestYouTubeLinkRequestValidation(t *testing.T) {
+	s := newAPIServer(&App{})
+	mux := testMux(s)
+
+	for name, payload := range map[string]string{
+		"junk link":    `{"youtubeUrl":"https://example.com/nope","artist":"Brian Mart","title":"Afro Dite"}`,
+		"channel link": `{"youtubeUrl":"https://www.youtube.com/@brianmart","artist":"Brian Mart","title":"Afro Dite"}`,
+		"no artist":    `{"youtubeUrl":"https://youtu.be/adDQxrFdK4I","title":"Afro Dite"}`,
+		"no title":     `{"youtubeUrl":"https://youtu.be/adDQxrFdK4I","artist":"Brian Mart"}`,
+		"spotify only": `{"youtubeUrl":"https://youtu.be/adDQxrFdK4I","spotifyId":"3n3Ppam7vgaVa1iaRUc9Lp"}`,
+		"blank artist": `{"youtubeUrl":"adDQxrFdK4I","artist":"  ","title":"Afro Dite"}`,
+		"relative dir": `{"youtubeUrl":"adDQxrFdK4I","artist":"Brian Mart","title":"Afro Dite","outputDir":"music"}`,
+	} {
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, newAPIRequest(http.MethodPost, "/download", strings.NewReader(payload)))
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("%s: expected 400, got %d", name, rec.Code)
+			continue
+		}
+		var body map[string]string
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil || body["code"] != "bad_request" || body["error"] == "" {
+			t.Errorf("%s: unexpected error body %s", name, rec.Body.String())
+		}
+	}
+	if len(s.jobs) != 0 {
+		t.Fatalf("rejected requests must not enqueue jobs, got %d", len(s.jobs))
+	}
+
+	rec := httptest.NewRecorder()
+	body := strings.NewReader(`{"youtubeUrl":"https://www.youtube.com/watch?v=adDQxrFdK4I&t=5","artist":"Brian Mart","title":"Afro Dite","outputDir":"/tmp/x"}`)
+	mux.ServeHTTP(rec, newAPIRequest(http.MethodPost, "/download", body))
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("valid youtube link: expected 202, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestYouTubeLinkJobView(t *testing.T) {
+	s := newAPIServer(&App{})
+	job := s.enqueue(apiDownloadRequest{YouTubeURL: "https://youtu.be/adDQxrFdK4I", Artist: "Brian Mart", Title: "Afro Dite"})
+	s.completeYouTubeLinkJob(job, "adDQxrFdK4I", "/tmp/x/Afro Dite - Brian Mart [yt-adDQxrFdK4I].flac")
+
+	rec := httptest.NewRecorder()
+	testMux(s).ServeHTTP(rec, newAPIRequest(http.MethodGet, "/download/"+job.ID, nil))
+	var view apiJobView
+	if err := json.Unmarshal(rec.Body.Bytes(), &view); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if view.Status != "done" || !view.Lossy || view.Source != "youtube (adDQxrFdK4I)" ||
+		view.FilePath != "/tmp/x/Afro Dite - Brian Mart [yt-adDQxrFdK4I].flac" || view.Error != nil {
+		t.Fatalf("unexpected job view: %+v", view)
+	}
+}
+
+func TestYouTubeRelayURL(t *testing.T) {
+	cases := map[string]string{
+		"":                          defaultYTRelayURL,
+		"https://qobuz.example/api": defaultYTRelayURL,
+		"http://127.0.0.1:8790/":    "http://127.0.0.1:8790",
+		"http://localhost:9000":     "http://localhost:9000",
+	}
+	for custom, want := range cases {
+		got := ytRelayURL(map[string]interface{}{"customQobuzApi": custom})
+		if got != want {
+			t.Errorf("%q: got %q, want %q", custom, got, want)
+		}
+	}
+}
