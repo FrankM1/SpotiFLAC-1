@@ -11,7 +11,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/pquerna/otp v1.5.0
 	github.com/ulikunitz/xz v0.5.16
-	github.com/wailsapp/wails/v2 v2.13.0
+	github.com/wailsapp/wails/v2 v2.12.0
 	go.etcd.io/bbolt v1.5.0
 	go.senan.xyz/taglib v0.14.0
 	golang.org/x/image v0.44.0
