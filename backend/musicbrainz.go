@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/text/cases"
@@ -325,7 +326,27 @@ func FetchMusicBrainzMetadata(isrc, title, artist, album string, useSingleGenre 
 		return meta, resultErr
 	}
 
-	musicBrainzCache.Store(cacheKey, meta)
+	storeMusicBrainzCache(cacheKey, meta)
 
 	return meta, nil
+}
+
+// musicBrainzCacheMax bounds the in-memory cache: one entry per ISRC looked
+// up this run would otherwise grow for as long as a headless run lasts. Past
+// the cap the cache starts over; the on-disk ISRC cache still answers.
+const musicBrainzCacheMax = 2000
+
+var musicBrainzCacheSize atomic.Int64
+
+func storeMusicBrainzCache(key string, meta Metadata) {
+	if _, loaded := musicBrainzCache.LoadOrStore(key, meta); loaded {
+		return
+	}
+	if musicBrainzCacheSize.Add(1) > musicBrainzCacheMax {
+		musicBrainzCache.Range(func(k, _ any) bool {
+			musicBrainzCache.Delete(k)
+			return true
+		})
+		musicBrainzCacheSize.Store(0)
+	}
 }

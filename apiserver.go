@@ -57,6 +57,8 @@ type apiJob struct {
 	Error     string
 	ItemID    string
 	CreatedAt time.Time
+	// FinishedAt is set when the job ends, so a long run can forget it later.
+	FinishedAt time.Time
 }
 
 type apiJobView struct {
@@ -79,14 +81,37 @@ type apiServer struct {
 	queue  chan *apiJob
 	nextID int
 	srv    *http.Server
+	// lastActivity is the last download request, status poll or finished job.
+	// Health checks don't count, so a companion that only checks the API is up
+	// doesn't keep a headless run alive.
+	lastActivity time.Time
 }
 
 func newAPIServer(app *App) *apiServer {
 	return &apiServer{
-		app:   app,
-		jobs:  make(map[string]*apiJob),
-		queue: make(chan *apiJob, 256),
+		app:          app,
+		jobs:         make(map[string]*apiJob),
+		queue:        make(chan *apiJob, 256),
+		lastActivity: time.Now(),
 	}
+}
+
+// listening reports whether the API got its port.
+func (s *apiServer) listening() bool {
+	return s.srv != nil
+}
+
+// activity returns the last activity, and whether any job is still queued or
+// downloading.
+func (s *apiServer) activity() (time.Time, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, j := range s.jobs {
+		if j.Status == apiJobQueued || j.Status == apiJobDownloading {
+			return s.lastActivity, true
+		}
+	}
+	return s.lastActivity, false
 }
 
 func (s *apiServer) start() {
@@ -288,8 +313,28 @@ func (s *apiServer) enqueue(req apiDownloadRequest) *apiJob {
 		CreatedAt: time.Now(),
 	}
 	s.jobs[job.ID] = job
+	s.lastActivity = time.Now()
+	s.mu.Unlock()
+	// Outside the lock: a full queue must not stall status polls.
 	s.queue <- job
+	s.mu.Lock()
 	return job
+}
+
+// pruneFinished forgets jobs that ended more than olderThan ago. A client
+// polls a job until it ends and never asks again, so a long run keeps
+// nothing of them. Returns how many were dropped.
+func (s *apiServer) pruneFinished(olderThan time.Duration) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for id, j := range s.jobs {
+		if !j.FinishedAt.IsZero() && time.Since(j.FinishedAt) > olderThan {
+			delete(s.jobs, id)
+			n++
+		}
+	}
+	return n
 }
 
 func (s *apiServer) handleDownload(w http.ResponseWriter, r *http.Request) {
@@ -340,6 +385,7 @@ func (s *apiServer) handleJobStatus(w http.ResponseWriter, r *http.Request) {
 	jobID := strings.TrimPrefix(r.URL.Path, "/download/")
 	s.mu.Lock()
 	job, ok := s.jobs[jobID]
+	s.lastActivity = time.Now()
 	s.mu.Unlock()
 	if !ok {
 		apiWriteError(w, http.StatusNotFound, "not_found", "unknown job id")
@@ -396,6 +442,8 @@ func (s *apiServer) completeJob(job *apiJob, service string, resp DownloadRespon
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	job.Status = apiJobDone
+	job.FinishedAt = time.Now()
+	s.lastActivity = job.FinishedAt
 	job.FilePath = resp.File
 	job.Lossy = resp.Lossy
 	if resp.Lossy {
@@ -413,6 +461,8 @@ func (s *apiServer) completeYouTubeLinkJob(job *apiJob, videoID, file string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	job.Status = apiJobDone
+	job.FinishedAt = time.Now()
+	s.lastActivity = job.FinishedAt
 	job.FilePath = file
 	job.Lossy = true
 	job.Source = fmt.Sprintf("youtube (%s)", videoID)
@@ -421,6 +471,8 @@ func (s *apiServer) completeYouTubeLinkJob(job *apiJob, videoID, file string) {
 func (s *apiServer) failJob(job *apiJob, msg string) {
 	s.mu.Lock()
 	job.Status = apiJobFailed
+	job.FinishedAt = time.Now()
+	s.lastActivity = job.FinishedAt
 	job.Error = msg
 	itemID := job.ItemID
 	s.mu.Unlock()

@@ -25,6 +25,7 @@ import (
 type App struct {
 	ctx                          context.Context
 	api                          *apiServer
+	headless                     bool
 	ytServer                     ytServerLauncher
 	replayGainAnalysisMu         sync.Mutex
 	replayGainAnalysisCancel     context.CancelFunc
@@ -348,6 +349,9 @@ func (a *App) startup(ctx context.Context) {
 	a.api = newAPIServer(a)
 	a.api.start()
 	go a.ensureYTServer()
+	if a.headless {
+		a.startHeadless(ctx)
+	}
 }
 
 func (a *App) shutdown(ctx context.Context) {
