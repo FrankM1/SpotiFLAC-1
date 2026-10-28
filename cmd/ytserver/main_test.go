@@ -54,3 +54,63 @@ func TestResolveVideoRejectsBadInput(t *testing.T) {
 		}
 	}
 }
+
+func TestPickCandidatePrefersYouTubeMusicHit(t *testing.T) {
+	cands := []ytCandidate{
+		{ID: "fan00000001", Title: "Artist - Song", Channel: "Some Fan", Duration: 240},
+		{ID: "topic000001", Title: "Song", Channel: "Artist - Topic", Duration: 240},
+		{ID: "music000001", Title: "Song", Channel: "Artist", Duration: 241, Music: true},
+	}
+	got, err := pickCandidate(cands, 240)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != "music000001" {
+		t.Fatalf("expected the YouTube Music hit, got %s", got.ID)
+	}
+}
+
+func TestPickCandidateMusicHitStillGatedByDuration(t *testing.T) {
+	cands := []ytCandidate{
+		{ID: "topic000001", Title: "Song", Channel: "Artist - Topic", Duration: 240},
+		{ID: "music000001", Title: "Song (Extended Mix)", Channel: "Artist", Duration: 420, Music: true},
+	}
+	got, err := pickCandidate(cands, 240)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != "topic000001" {
+		t.Fatalf("out-of-tolerance music hit should lose to the in-tolerance Topic upload, got %s", got.ID)
+	}
+}
+
+func TestPickCandidateFallsBackToMusicHitWhenNothingFits(t *testing.T) {
+	cands := []ytCandidate{
+		{ID: "fan00000001", Title: "Artist - Song", Channel: "Some Fan", Duration: 300},
+		{ID: "music000001", Title: "Song", Channel: "Artist", Duration: 260, Music: true},
+	}
+	got, err := pickCandidate(cands, 240)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != "music000001" {
+		t.Fatalf("expected fallback to the music hit, got %s", got.ID)
+	}
+}
+
+func TestPickCandidateWithoutMusicKeepsOldBehaviour(t *testing.T) {
+	cands := []ytCandidate{
+		{ID: "fan00000001", Title: "Artist - Song", Channel: "Some Fan", Duration: 240},
+		{ID: "topic000001", Title: "Song", Channel: "Artist - Topic", Duration: 243},
+	}
+	got, err := pickCandidate(cands, 240)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != "topic000001" {
+		t.Fatalf("expected the Topic upload, got %s", got.ID)
+	}
+	if _, err := pickCandidate([]ytCandidate{{ID: "fan00000001", Duration: 300}}, 240); err == nil {
+		t.Fatal("expected an error when nothing fits and nothing is official")
+	}
+}

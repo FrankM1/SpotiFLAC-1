@@ -28,21 +28,24 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/spotbye/SpotiFLAC/backend"
 )
 
 var (
-	listenAddr = flag.String("addr", "127.0.0.1:8790", "listen address")
-	publicURL  = flag.String("public-url", "", "public base URL used to build file links (defaults to the request host)")
-	ytdlpPath  = flag.String("yt-dlp", "yt-dlp", "path to yt-dlp binary")
-	ffmpegPath = flag.String("ffmpeg", "ffmpeg", "path to ffmpeg binary")
-	signingKey = flag.String("key", "", "HMAC key for signing file tokens (random ephemeral key generated if empty; set a persistent value in production)")
-	searchN    = flag.Int("search-count", 6, "number of YouTube candidates to consider")
-	durTolSec  = flag.Int("duration-tolerance", 12, "max seconds a candidate duration may differ from the track")
-	appleMatch = flag.Bool("apple-match", true, "use Apple Music (iTunes Search API) to confirm/fill canonical duration for sharper YouTube matching")
-	appleStore = flag.String("apple-store", "", "iTunes storefront country code for lookups (e.g. ZA, US); empty = Apple default")
+	listenAddr  = flag.String("addr", "127.0.0.1:8790", "listen address")
+	publicURL   = flag.String("public-url", "", "public base URL used to build file links (defaults to the request host)")
+	ytdlpPath   = flag.String("yt-dlp", "yt-dlp", "path to yt-dlp binary")
+	ffmpegPath  = flag.String("ffmpeg", "ffmpeg", "path to ffmpeg binary")
+	signingKey  = flag.String("key", "", "HMAC key for signing file tokens (random ephemeral key generated if empty; set a persistent value in production)")
+	searchN     = flag.Int("search-count", 6, "number of YouTube candidates to consider")
+	musicSearch = flag.Bool("music-search", true, "also search YouTube Music songs and prefer those hits (catalog audio, not fan uploads)")
+	musicProbe  = flag.Int("music-probe", 2, "how many YouTube Music hits missing from the regular search to fetch duration/channel for")
+	durTolSec   = flag.Int("duration-tolerance", 12, "max seconds a candidate duration may differ from the track")
+	appleMatch  = flag.Bool("apple-match", true, "use Apple Music (iTunes Search API) to confirm/fill canonical duration for sharper YouTube matching")
+	appleStore  = flag.String("apple-store", "", "iTunes storefront country code for lookups (e.g. ZA, US); empty = Apple default")
 
 	dlAttempts    = flag.Int("download-attempts", 6, "max download attempts per track before giving up (transient 403s usually clear within a couple)")
 	dlBackoffBase = flag.Duration("download-backoff", 2*time.Second, "base delay for exponential backoff between download attempts")
@@ -175,7 +178,11 @@ func handleResolve(w http.ResponseWriter, r *http.Request) {
 	if trackID != "" && q.Get("title") == "" {
 		src = "qobuz:" + trackID
 	}
-	log.Printf("resolved [%s] %q - %q -> yt:%s (%ds vs %ds)", src, artist, title, cand.ID, cand.Duration, wantDur)
+	via := "youtube"
+	if cand.Music {
+		via = "youtube-music"
+	}
+	log.Printf("resolved [%s] %q - %q -> yt:%s via %s (%ds vs %ds)", src, artist, title, cand.ID, via, cand.Duration, wantDur)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"data":    map[string]any{"url": fileURL},
@@ -415,17 +422,56 @@ type ytCandidate struct {
 	Title    string
 	Channel  string
 	Duration int
+	// Music is set when the YouTube Music song search returned this video,
+	// i.e. it is a catalog track rather than a fan upload or a video.
+	Music bool
 }
 
-// findYouTubeMatch runs a fast flat search (which, via -J, still carries
-// per-result duration) and picks the candidate whose duration is closest to the
-// track, preferring official/"Topic" audio uploads and rejecting obviously-wrong
-// lengths. Flat search avoids fully extracting every candidate, cutting resolve
-// time from ~15-20s to ~2s.
+// findYouTubeMatch gathers candidates from a fast flat YouTube search and, in
+// parallel, from a YouTube Music song search, then picks the best one with
+// pickCandidate. Flat search avoids fully extracting every candidate, cutting
+// resolve time from ~15-20s to ~2s.
 //
 // Note: `--flat-playlist --print "%(duration)s"` yields empty durations, but the
 // `--flat-playlist -J` JSON dump does populate `duration` — hence -J here.
 func findYouTubeMatch(ctx context.Context, artist, title string, wantDur int) (*ytCandidate, error) {
+	var (
+		wg        sync.WaitGroup
+		cands     []ytCandidate
+		searchErr error
+		musicIDs  []string
+	)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		cands, searchErr = searchYouTube(ctx, artist, title)
+	}()
+	if *musicSearch {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ids, err := searchYouTubeMusic(ctx, artist, title)
+			if err != nil {
+				// Music search is a preference, not a requirement: log and go on
+				// with the regular results.
+				log.Printf("youtube music search failed for %q - %q: %v", artist, title, err)
+				return
+			}
+			musicIDs = ids
+		}()
+	}
+	wg.Wait()
+	if searchErr != nil {
+		return nil, searchErr
+	}
+
+	cands = mergeMusicHits(ctx, cands, musicIDs)
+	return pickCandidate(cands, wantDur)
+}
+
+// searchYouTube runs a flat `ytsearch` and returns candidates with duration
+// and channel populated.
+func searchYouTube(ctx context.Context, artist, title string) ([]ytCandidate, error) {
 	query := fmt.Sprintf("ytsearch%d:%s %s", *searchN, artist, title)
 	cmd := exec.CommandContext(ctx, *ytdlpPath,
 		"--flat-playlist", "-J", "--no-warnings", "--quiet",
@@ -448,22 +494,140 @@ func findYouTubeMatch(ctx context.Context, artist, title string, wantDur int) (*
 	if err := json.Unmarshal(out, &res); err != nil {
 		return nil, fmt.Errorf("parse search results: %w", err)
 	}
-
-	// Pick the best candidate whose duration is within tolerance. Separately
-	// track the best "official audio" (Topic / official-audio) candidate so that,
-	// when nothing passes the duration filter (common for niche tracks where the
-	// only upload is an official one with a slightly different length), we still
-	// return the authoritative upload instead of failing.
-	var best, bestOfficial *ytCandidate
-	bestScore := 1 << 30
-	bestOfficialDiff := 1 << 30
+	var cands []ytCandidate
 	for _, e := range res.Entries {
 		if e.ID == "" {
 			continue
 		}
-		c := ytCandidate{ID: e.ID, Duration: int(e.Duration), Channel: firstNonEmpty(e.Channel, e.Uploader), Title: e.Title}
+		cands = append(cands, ytCandidate{ID: e.ID, Duration: int(e.Duration), Channel: firstNonEmpty(e.Channel, e.Uploader), Title: e.Title})
+	}
+	return cands, nil
+}
+
+// searchYouTubeMusic runs a YouTube Music "songs" search and returns the video
+// IDs in rank order. The flat dump of this extractor carries only id and
+// title (no duration, no channel), so callers must fill those in from the
+// regular search or by probing the video.
+func searchYouTubeMusic(ctx context.Context, artist, title string) ([]string, error) {
+	u := "https://music.youtube.com/search?q=" + url.QueryEscape(artist+" "+title) + "#songs"
+	cmd := exec.CommandContext(ctx, *ytdlpPath,
+		"--flat-playlist", "-J", "--no-warnings", "--quiet",
+		"--playlist-end", strconv.Itoa(*searchN),
+		u,
+	)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("yt-dlp music search: %w", err)
+	}
+	var res struct {
+		Entries []struct {
+			ID string `json:"id"`
+		} `json:"entries"`
+	}
+	if err := json.Unmarshal(out, &res); err != nil {
+		return nil, fmt.Errorf("parse music search results: %w", err)
+	}
+	var ids []string
+	for _, e := range res.Entries {
+		if e.ID != "" {
+			ids = append(ids, e.ID)
+		}
+	}
+	return ids, nil
+}
+
+// mergeMusicHits marks candidates that the YouTube Music search also returned
+// and, for the top music hits the regular search missed, probes their
+// duration/channel in parallel so they can go through the same duration gate.
+func mergeMusicHits(ctx context.Context, cands []ytCandidate, musicIDs []string) []ytCandidate {
+	if len(musicIDs) == 0 {
+		return cands
+	}
+	known := make(map[string]int, len(cands))
+	for i, c := range cands {
+		known[c.ID] = i
+	}
+	var missing []string
+	for _, id := range musicIDs {
+		if i, ok := known[id]; ok {
+			cands[i].Music = true
+			continue
+		}
+		if len(missing) < *musicProbe {
+			missing = append(missing, id)
+		}
+	}
+	if len(missing) == 0 {
+		return cands
+	}
+
+	probed := make([]*ytCandidate, len(missing))
+	var wg sync.WaitGroup
+	for i, id := range missing {
+		wg.Add(1)
+		go func(i int, id string) {
+			defer wg.Done()
+			c, err := probeVideo(ctx, id)
+			if err != nil {
+				log.Printf("probe yt:%s failed: %v", id, err)
+				return
+			}
+			probed[i] = c
+		}(i, id)
+	}
+	wg.Wait()
+	for _, c := range probed {
+		if c != nil {
+			c.Music = true
+			cands = append(cands, *c)
+		}
+	}
+	return cands
+}
+
+// probeVideo fetches one video's metadata without downloading it.
+func probeVideo(ctx context.Context, id string) (*ytCandidate, error) {
+	cmd := exec.CommandContext(ctx, *ytdlpPath,
+		"-J", "--no-playlist", "--skip-download", "--no-warnings", "--quiet",
+		"https://www.youtube.com/watch?v="+id,
+	)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("yt-dlp probe: %w", err)
+	}
+	var e struct {
+		ID       string  `json:"id"`
+		Title    string  `json:"title"`
+		Channel  string  `json:"channel"`
+		Uploader string  `json:"uploader"`
+		Duration float64 `json:"duration"`
+	}
+	if err := json.Unmarshal(out, &e); err != nil {
+		return nil, fmt.Errorf("parse probe: %w", err)
+	}
+	if e.ID == "" {
+		return nil, fmt.Errorf("probe returned no id")
+	}
+	return &ytCandidate{ID: e.ID, Title: e.Title, Channel: firstNonEmpty(e.Channel, e.Uploader), Duration: int(e.Duration)}, nil
+}
+
+// pickCandidate picks the candidate whose duration is closest to the track,
+// preferring YouTube Music catalog hits first, then official/"Topic" audio
+// uploads, and rejecting obviously-wrong lengths. Separately it tracks the
+// best "official" candidate (music hit, Topic, or official audio) so that,
+// when nothing passes the duration filter (common for niche tracks where the
+// only upload is an official one with a slightly different length), we still
+// return the authoritative upload instead of failing.
+func pickCandidate(cands []ytCandidate, wantDur int) (*ytCandidate, error) {
+	var best, bestOfficial *ytCandidate
+	bestScore := 1 << 30
+	bestOfficialDiff := 1 << 30
+	for _, c := range cands {
+		if c.ID == "" {
+			continue
+		}
 		lc := strings.ToLower(c.Channel + " " + c.Title)
-		official := strings.Contains(lc, "topic") || strings.Contains(lc, "official audio")
+		official := c.Music || strings.Contains(lc, "topic") || strings.Contains(lc, "official audio")
 		durDiff := abs(c.Duration - wantDur)
 
 		if official {
@@ -478,6 +642,9 @@ func findYouTubeMatch(ctx context.Context, artist, title string, wantDur int) (*
 			continue // wrong length -> almost certainly the wrong track
 		}
 		score := durDiff
+		if c.Music {
+			score -= 150 // YouTube Music catalog hit beats everything else
+		}
 		if official {
 			score -= 100 // strongly prefer official audio uploads
 		}

@@ -44,8 +44,10 @@ Flags:
 | `-yt-dlp` | `yt-dlp` | path to yt-dlp |
 | `-ffmpeg` | `ffmpeg` | path to ffmpeg |
 | `-key` | (random per run) | HMAC key for signing file tokens. Left empty, a random ephemeral key is generated at startup (tokens then last one process lifetime). Set a persistent random value in production. |
-| `-search-count` | `6` | YouTube candidates to consider per track |
-| `-duration-tolerance` | `6` | max seconds a candidate may differ from the track |
+| `-search-count` | `6` | YouTube candidates to consider per track (applies to both searches) |
+| `-duration-tolerance` | `12` | max seconds a candidate may differ from the track |
+| `-music-search` | `true` | also search YouTube Music songs and prefer those hits |
+| `-music-probe` | `2` | how many YouTube Music hits missing from the regular search get a metadata probe (about 4s each, run in parallel) |
 
 ## Use it from the app
 
@@ -75,6 +77,10 @@ storage is needed between the two calls.
 
 - Resolve takes ~15–20s per track because it fully extracts candidate durations
   to avoid grabbing the wrong (extended / sped-up / live) version.
-- Matching prefers "Topic" / "official audio" uploads and rejects candidates
-  whose length differs from the track by more than the duration tolerance.
+- Matching prefers YouTube Music song hits (catalog audio, not fan uploads),
+  then "Topic" / "official audio" uploads, and rejects candidates whose length
+  differs from the track by more than the duration tolerance. The YouTube
+  Music search runs in parallel with the regular one; its flat results carry
+  no duration, so the top hits the regular search missed get a metadata probe
+  before the duration gate. Turn it off with `-music-search=false`.
 - For remote/HTTPS hosting, put it behind a reverse proxy and set `-public-url`.
